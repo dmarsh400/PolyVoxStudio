@@ -1,0 +1,33 @@
+# PolyVox Studio - Minimum Requirements
+# Core Python Dependencies for Audiobook Generation
+
+# Deep Learning & NLP
+torch>=2.0.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+spacy>=3.5.0
+
+# Text-to-Speech
+coqui-tts>=0.20.0
+
+# Audio Processing
+numpy>=1.24.0
+scipy>=1.10.0
+soundfile>=0.12.0
+pydub>=0.25.0
+mutagen>=1.47.0
+
+# GUI
+customtkinter>=5.2.0
+Pillow>=10.0.0
+
+# Document Processing
+beautifulsoup4>=4.12.0
+ebooklib>=0.18
+PyPDF2>=3.0.0
+
+# Progress & Utilities
+tqdm>=4.65.0
+
+# Optional: For audio preview
+sounddevice>=0.4.6

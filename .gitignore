@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# PolyVox Output
+output/
+output_audio/
+outdir/
+*.wav
+*.mp3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# Logs
+*.log
+logs/
+
+# Model files (too large for git)
+models/
+*.pth
+*.pt
+*.bin
+*.onnx
+
+# User data
+voices_selections.json
+*.db
+*.sqlite
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Documentation builds
+docs/_build/
+*.pdf
+
+# Test files
+test_output/
+*.test
+
+# Environment files
+.env
+.env.local
