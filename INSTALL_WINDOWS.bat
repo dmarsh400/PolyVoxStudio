@@ -2,18 +2,10 @@
 REM ======================================================================
 REM PolyVox Studio - Windows Installation Launcher  
 REM ======================================================================
-setlocal
+setlocal enabledelayedexpansion
 
-:: Set colors for output
-set "GREEN=[92m"
-set "BLUE=[94m"
-set "YELLOW=[93m"
-set "MAGENTA=[95m"
-set "CYAN=[96m"
-set "RED=[91m"
-set "RESET=[0m"
-
-cls
+:: Enable ANSI color support on Windows 10+
+reg add HK
 echo.
 echo %CYAN%██████╗  ██████╗ ██╗  ██╗   ██╗██╗   ██╗ ██████╗ ██╗  ██╗%RESET%
 echo %CYAN%██╔══██╗██╔═══██╗██║  ╚██╗ ██╔╝██║   ██║██╔═══██╗╚██╗██╔╝%RESET%
