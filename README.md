@@ -1,362 +1,722 @@
-<div align="center"># PolyVox Studio
+<div align="center"><div align="center"># PolyVox Studio
 
   
 
-# 🎭 PolyVox Studio**Professional Audiobook Generation with AI Voice Synthesis**
+# 🎭 PolyVox Studio  
 
 
 
-### *Many voices, one story.**Many voices, one story.*
+### *Many voices, one story.*# 🎭 PolyVox Studio**Professional Audiobook Generation with AI Voice Synthesis**
 
 
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)---
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
-[![GPU Support](https://img.shields.io/badge/GPU-CUDA%20%7C%20Legacy-green.svg)](GPU_COMPATIBILITY.md)## 🎙️ Overview
+[![GPU Support](https://img.shields.io/badge/GPU-CUDA%20%7C%20Legacy-green.svg)](GPU_COMPATIBILITY.md)### *Many voices, one story.**Many voices, one story.*
 
 
 
-**Transform your novels into immersive audiobooks with AI-powered character voice cloning**PolyVox Studio is a powerful desktop application for creating professional audiobooks with AI-generated voices. It features:
+**Transform your novels into immersive audiobooks with AI-powered character voice cloning**
 
 
 
-[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [GPU Support](#-gpu-support) • [Documentation](#-documentation)- **Intelligent Character Detection** - Automatically identifies characters and dialogue
+[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [GPU Support](#-gpu-support) • [Documentation](#-documentation)[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)---
 
-- **Multi-Voice Support** - Assign different voices to each character and narrator
 
-![PolyVox Studio Interface](docs/screenshots/main_interface.png)- **XTTS v2 Integration** - High-quality voice cloning and synthesis
 
-- **Professional Audio Processing** - Automatic enhancement and normalization
+![PolyVox Studio Interface](docs/screenshots/main_interface.png)[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
-</div>- **Multi-GPU Support** - Efficient processing with automatic GPU load balancing
 
-- **Chapter Management** - Smart chapter detection and organization
 
----- **Easy Voice Cloning** - Clone voices from audio samples
+</div>[![GPU Support](https://img.shields.io/badge/GPU-CUDA%20%7C%20Legacy-green.svg)](GPU_COMPATIBILITY.md)## 🎙️ Overview
 
 
-
-## 🎯 What is PolyVox Studio?---
-
-
-
-PolyVox Studio is a powerful desktop application that automatically converts novels and books into professional-quality audiobooks with **distinct AI voices for each character**. Using advanced NLP and voice cloning technology, it:## 🚀 Quick Start
-
-
-
-- 📖 **Automatically detects characters** in your book using BookNLP### Prerequisites
-
-- 🗣️ **Assigns unique voices** to each character (or clone your own!)
-
-- 🎙️ **Generates natural audiobook narration** with character dialogue- **Python 3.8+** (3.10 recommended)
-
-- ✏️ **Provides full editing control** over character assignments and dialogue- **8GB+ RAM** (16GB+ recommended)
-
-- 🎨 **Offers an intuitive GUI** built with CustomTkinter- **Optional**: NVIDIA GPU with CUDA support for faster processing
-
-
-
-Whether you're an author wanting to hear your characters come alive, a reader who loves audiobooks, or a content creator producing audio content, PolyVox Studio makes it easy.### Installation
-
-
-
----1. **Clone or download this repository**
-
-   ```bash
-
-## ✨ Features   git clone https://github.com/yourusername/polyvox-studio.git
-
-   cd polyvox-studio
-
-### 🤖 Intelligent Character Detection   ```
-
-- **Automatic character identification** using state-of-the-art BookNLP
-
-- **Quote attribution** with speaker detection2. **Run the installer**
-
-- **Coreference resolution** to track character mentions   ```bash
-
-- **Handles complex narratives** with multiple POVs   python install.py
-
-   ```
-
-### 🎤 Advanced Voice Cloning   
-
-- **30+ built-in voices** across multiple accents and styles   The installer will:
-
-- **Clone custom voices** from audio samples (5-15 seconds)   - Install all dependencies
-
-- **Voice assignment UI** with visual character management   - Download required language models
-
-- **Narrator voice** for non-dialogue text   - Optionally create a desktop icon
-
-
-
-### 📚 Smart Text Processing3. **Launch PolyVox Studio**
-
-- **Chapter detection** and segmentation   
-
-- **Dialogue extraction** with attribution confidence scoring   **Linux/Mac:**
-
-- **Handles various book formats** (TXT, EPUB coming soon)   ```bash
-
-- **BookNLP integration** for literary analysis   ./run_gui.sh
-
-   ```
-
-### 🎛️ Full Editorial Control   
-
-- **Character merging** for variations (e.g., "John" + "Mr. Smith")   **Windows:**
-
-- **Character renaming** to fix detection errors   ```bash
-
-- **Line-by-line editing** of speaker assignments   run_gui.bat
-
-- **Manual voice assignment** override   ```
-
-   
-
-### ⚡ Performance & Compatibility   Or use the desktop icon if you created one.
-
-- **GPU acceleration** (NVIDIA CUDA)
-
-- **Legacy GPU support** for older cards (GTX 700+, K80)---
-
-- **CPU fallback mode** for systems without GPU
-
-- **Batch processing** for long books## 📚 Features
-
-
-
-### 🎨 Modern Interface### 1. Book Processing
-
-- **Dark theme** CustomTkinter UI- Load `.txt`, `.epub`, or `.pdf` files
-
-- **Real-time progress tracking** with detailed logs- Automatic chapter detection
-
-- **Debug console** for troubleshooting- Smart text segmentation
-
-- **Settings management** with persistent configuration
-
-### 2. Character Detection
-
----- AI-powered character identification
-
-- Dialogue attribution
-
-## 🚀 Installation- Quote extraction
-
-- Speaker recognition
-
-PolyVox Studio offers two installation paths depending on your GPU:
-
-### 3. Voice Management
-
-<table>- Extensive voice library
-
-<tr>- Voice cloning from audio samples
-
-<td width="50%">- Per-character voice assignment
-
-- Preview voices before processing
-
-### 🔥 Standard Installation
-
-**For modern GPUs (RTX 20xx+, GTX 16xx)**### 4. Audio Generation
-
-- High-quality XTTS v2 synthesis
-
-```bash- Multi-voice support
-
-# Clone the repository- Automatic audio enhancement
-
-git clone https://github.com/dmarsh400/PolyVoxStudio.git- Progress tracking
-
-cd PolyVoxStudio- Chapter-by-chapter processing
-
-
-
-# Linux/Mac### 5. GPU Acceleration
-
-./install.sh- Automatic GPU detection
-
-- Multi-GPU load balancing
-
-# Windows- CPU fallback support
-
-install.bat- Real-time GPU monitoring
-
-```
 
 ---
 
-**Requirements:**
 
-- Python 3.9 or higher## 🎨 Usage
 
-- NVIDIA GPU with Compute Capability 6.1+
+## 🎯 What is PolyVox Studio?**Transform your novels into immersive audiobooks with AI-powered character voice cloning**PolyVox Studio is a powerful desktop application for creating professional audiobooks with AI-generated voices. It features:
 
-- CUDA 12.1+ drivers### Basic Workflow
 
-- 8GB+ VRAM recommended
 
-1. **Load Your Book**
+PolyVox Studio is a powerful desktop application that automatically converts novels and books into professional-quality audiobooks with **distinct AI voices for each character**. Using advanced NLP and voice cloning technology, it:
 
-</td>   - Go to the "Book Processing" tab
 
-<td width="50%">   - Click "Load Book" and select your file
 
-   - Review detected chapters
+- 📖 **Automatically detects characters** in your book using BookNLP[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [GPU Support](#-gpu-support) • [Documentation](#-documentation)- **Intelligent Character Detection** - Automatically identifies characters and dialogue
 
-### 🐢 Legacy GPU Installation
+- 🗣️ **Assigns unique voices** to each character (or clone your own!)
 
-**For older GPUs (GTX 700-1080, K80)**2. **Detect Characters**
+- 🎙️ **Generates natural audiobook narration** with character dialogue- **Multi-Voice Support** - Assign different voices to each character and narrator
 
-   - Switch to the "Characters" tab
+- ✏️ **Provides full editing control** over character assignments and dialogue
 
-```bash   - Click "Detect Characters"
+- 🎨 **Offers an intuitive GUI** built with CustomTkinter![PolyVox Studio Interface](docs/screenshots/main_interface.png)- **XTTS v2 Integration** - High-quality voice cloning and synthesis
 
-# Clone the repository   - Review identified characters and dialogue
+
+
+Whether you're an author wanting to hear your characters come alive, a reader who loves audiobooks, or a content creator producing audio content, PolyVox Studio makes it easy.- **Professional Audio Processing** - Automatic enhancement and normalization
+
+
+
+---</div>- **Multi-GPU Support** - Efficient processing with automatic GPU load balancing
+
+
+
+## ✨ Features- **Chapter Management** - Smart chapter detection and organization
+
+
+
+### 🤖 Intelligent Character Detection---- **Easy Voice Cloning** - Clone voices from audio samples
+
+- **Automatic character identification** using state-of-the-art BookNLP
+
+- **Quote attribution** with speaker detection
+
+- **Coreference resolution** to track character mentions
+
+- **Handles complex narratives** with multiple POVs## 🎯 What is PolyVox Studio?---
+
+
+
+### 🎤 Advanced Voice Cloning
+
+- **30+ built-in voices** across multiple accents and styles
+
+- **Clone custom voices** from audio samples (5-15 seconds)PolyVox Studio is a powerful desktop application that automatically converts novels and books into professional-quality audiobooks with **distinct AI voices for each character**. Using advanced NLP and voice cloning technology, it:## 🚀 Quick Start
+
+- **Voice assignment UI** with visual character management
+
+- **Narrator voice** for non-dialogue text
+
+
+
+### 📚 Smart Text Processing- 📖 **Automatically detects characters** in your book using BookNLP### Prerequisites
+
+- **Chapter detection** and segmentation
+
+- **Dialogue extraction** with attribution confidence scoring- 🗣️ **Assigns unique voices** to each character (or clone your own!)
+
+- **Handles various book formats** (TXT, EPUB coming soon)
+
+- **BookNLP integration** for literary analysis- 🎙️ **Generates natural audiobook narration** with character dialogue- **Python 3.8+** (3.10 recommended)
+
+
+
+### 🎛️ Full Editorial Control- ✏️ **Provides full editing control** over character assignments and dialogue- **8GB+ RAM** (16GB+ recommended)
+
+- **Character merging** for variations (e.g., "John" + "Mr. Smith")
+
+- **Character renaming** to fix detection errors- 🎨 **Offers an intuitive GUI** built with CustomTkinter- **Optional**: NVIDIA GPU with CUDA support for faster processing
+
+- **Line-by-line editing** of speaker assignments
+
+- **Manual voice assignment** override
+
+
+
+### ⚡ Performance & CompatibilityWhether you're an author wanting to hear your characters come alive, a reader who loves audiobooks, or a content creator producing audio content, PolyVox Studio makes it easy.### Installation
+
+- **GPU acceleration** (NVIDIA CUDA)
+
+- **Legacy GPU support** for older cards (GTX 700+, K80)
+
+- **CPU fallback mode** for systems without GPU
+
+- **Batch processing** for long books---1. **Clone or download this repository**
+
+
+
+### 🎨 Modern Interface   ```bash
+
+- **Dark theme** CustomTkinter UI
+
+- **Real-time progress tracking** with detailed logs## ✨ Features   git clone https://github.com/yourusername/polyvox-studio.git
+
+- **Debug console** for troubleshooting
+
+- **Settings management** with persistent configuration   cd polyvox-studio
+
+
+
+---### 🤖 Intelligent Character Detection   ```
+
+
+
+## 🚀 Installation- **Automatic character identification** using state-of-the-art BookNLP
+
+
+
+PolyVox Studio offers two installation paths depending on your GPU:- **Quote attribution** with speaker detection2. **Run the installer**
+
+
+
+### 🔥 Standard Installation- **Coreference resolution** to track character mentions   ```bash
+
+**For modern GPUs (RTX 20xx+, GTX 16xx)**
+
+- **Handles complex narratives** with multiple POVs   python install.py
+
+```bash
+
+# Clone the repository   ```
 
 git clone https://github.com/dmarsh400/PolyVoxStudio.git
 
-cd PolyVoxStudio3. **Assign Voices**
-
-   - Go to the "Voices" tab
-
-# Linux/Mac   - Assign a voice to each character
-
-./install_legacy_gpu.sh   - Preview voices before finalizing
+cd PolyVoxStudio### 🎤 Advanced Voice Cloning   
 
 
 
-# Windows4. **Generate Audio**
+# Linux/Mac- **30+ built-in voices** across multiple accents and styles   The installer will:
 
-install_legacy_gpu.bat   - Switch to "Audio Processing" tab
+./install.sh
 
-```   - Click "Generate Audio"
+- **Clone custom voices** from audio samples (5-15 seconds)   - Install all dependencies
 
-   - Wait for processing to complete
+# Windows
 
-**Requirements:**   - Find your audiobook in the `output_audio/` folder
-
-- Python 3.9
-
-- NVIDIA GPU with Compute Capability 3.5+### Advanced Features
-
-- CUDA 11.6 compatible drivers (450.80.02+)
-
-- 6GB+ VRAM recommended#### Voice Cloning
-
-1. Go to "Clone Voices" tab
-
-</td>2. Record or upload a 10-30 second audio sample
-
-</tr>3. Enter voice details
-
-</table>4. Click "Save Voice"
-
-5. Use the cloned voice like any other voice
-
-👉 **Not sure which installation to use?** Check the [GPU Compatibility Guide](GPU_COMPATIBILITY.md)
-
-#### Chapter-by-Chapter Processing
-
-### 📦 Dependencies- Process large books one chapter at a time
-
-- Each chapter is processed independently
-
-Both installations automatically set up:- No cross-contamination between chapters
-
-- **PyTorch** (2.1+ or 1.13 for legacy)
-
-- **Coqui TTS** for voice synthesis---
-
-- **BookNLP** for character detection
-
-- **SpaCy** for NLP processing## ⚙️ Configuration
-
-- **CustomTkinter** for the GUI
-
-- And many more...### GPU Setup
-
-
-
----PolyVox Studio automatically detects and uses available GPUs. To force CPU mode:
-
-
-
-## 🎬 Quick StartEdit `run_gui.sh` (Linux/Mac) or `run_gui.bat` (Windows):
-
-```bash
-
-### 1️⃣ Launch the Applicationexport CUDA_VISIBLE_DEVICES=""  # Force CPU mode
+install.bat- **Voice assignment UI** with visual character management   - Download required language models
 
 ```
 
-```bash
+- **Narrator voice** for non-dialogue text   - Optionally create a desktop icon
 
-# Standard installation### Audio Quality
+**Requirements:**
 
-./run_gui.sh          # Linux/Mac
+- Python 3.9 or higher
 
-run_gui.bat           # WindowsAudio enhancement requires FFmpeg. Install it:
+- NVIDIA GPU with Compute Capability 6.1+
+
+- CUDA 12.1+ drivers### 📚 Smart Text Processing3. **Launch PolyVox Studio**
+
+- 8GB+ VRAM recommended
+
+- **Chapter detection** and segmentation   
+
+### 🐢 Legacy GPU Installation
+
+**For older GPUs (GTX 700-1080, K80)**- **Dialogue extraction** with attribution confidence scoring   **Linux/Mac:**
 
 
 
-# Legacy GPU installation**Linux:**
+```bash- **Handles various book formats** (TXT, EPUB coming soon)   ```bash
 
-./run_gui_legacy.sh   # Linux/Mac```bash
+# Clone the repository
 
-run_gui_legacy.bat    # Windowssudo apt install ffmpeg
+git clone https://github.com/dmarsh400/PolyVoxStudio.git- **BookNLP integration** for literary analysis   ./run_gui.sh
 
-``````
+cd PolyVoxStudio
+
+   ```
+
+# Linux/Mac
+
+./install_legacy_gpu.sh### 🎛️ Full Editorial Control   
 
 
 
-### 2️⃣ Process Your First Book**Mac:**
+# Windows- **Character merging** for variations (e.g., "John" + "Mr. Smith")   **Windows:**
 
-```bash
+install_legacy_gpu.bat
 
-1. **Click "Load Book"** and select your text filebrew install ffmpeg
+```- **Character renaming** to fix detection errors   ```bash
 
-2. **Enter book details** (title, author, genre)```
 
-3. **Click "Run BookNLP & Attribution"** to detect characters
 
-4. **Review character detection** in the Characters tab**Windows:**
+**Requirements:**- **Line-by-line editing** of speaker assignments   run_gui.bat
 
-5. **Assign voices** in the Clone Voices tabDownload from [ffmpeg.org](https://ffmpeg.org/download.html)
+- Python 3.9
+
+- NVIDIA GPU with Compute Capability 3.5+- **Manual voice assignment** override   ```
+
+- CUDA 11.6 compatible drivers (450.80.02+)
+
+- 6GB+ VRAM recommended   
+
+
+
+👉 **Not sure which installation to use?** Check the [GPU Compatibility Guide](GPU_COMPATIBILITY.md)### ⚡ Performance & Compatibility   Or use the desktop icon if you created one.
+
+
+
+### 📦 Dependencies- **GPU acceleration** (NVIDIA CUDA)
+
+
+
+Both installations automatically set up:- **Legacy GPU support** for older cards (GTX 700+, K80)---
+
+- **PyTorch** (2.1+ or 1.13 for legacy)
+
+- **Coqui TTS** for voice synthesis- **CPU fallback mode** for systems without GPU
+
+- **BookNLP** for character detection
+
+- **SpaCy** for NLP processing- **Batch processing** for long books## 📚 Features
+
+- **CustomTkinter** for the GUI
+
+- And many more...
+
+
+
+---### 🎨 Modern Interface### 1. Book Processing
+
+
+
+## 🎬 Quick Start- **Dark theme** CustomTkinter UI- Load `.txt`, `.epub`, or `.pdf` files
+
+
+
+### 1️⃣ Launch the Application- **Real-time progress tracking** with detailed logs- Automatic chapter detection
+
+
+
+```bash- **Debug console** for troubleshooting- Smart text segmentation
+
+# Standard installation
+
+./run_gui.sh          # Linux/Mac- **Settings management** with persistent configuration
+
+run_gui.bat           # Windows
+
+### 2. Character Detection
+
+# Legacy GPU installation
+
+./run_gui_legacy.sh   # Linux/Mac---- AI-powered character identification
+
+run_gui_legacy.bat    # Windows
+
+```- Dialogue attribution
+
+
+
+### 2️⃣ Process Your First Book## 🚀 Installation- Quote extraction
+
+
+
+1. **Click "Load Book"** and select your text file- Speaker recognition
+
+2. **Enter book details** (title, author, genre)
+
+3. **Click "Run BookNLP & Attribution"** to detect charactersPolyVox Studio offers two installation paths depending on your GPU:
+
+4. **Review character detection** in the Characters tab
+
+5. **Assign voices** in the Clone Voices tab### 3. Voice Management
+
+6. **Generate audio** in the Settings tab
+
+<table>- Extensive voice library
+
+### 3️⃣ Advanced Workflows
+
+<tr>- Voice cloning from audio samples
+
+#### Merge Character Variations
+
+If "John", "John Smith", and "Mr. Smith" are detected as separate characters:<td width="50%">- Per-character voice assignment
+
+1. Go to **Characters tab**
+
+2. Select all variations- Preview voices before processing
+
+3. Click **"Merge Characters"**
+
+4. Choose which name to keep### 🔥 Standard Installation
+
+
+
+#### Clone Custom Voices**For modern GPUs (RTX 20xx+, GTX 16xx)**### 4. Audio Generation
+
+1. Go to **Clone Voices tab**
+
+2. Click **"Upload Audio"** (5-15 second sample)- High-quality XTTS v2 synthesis
+
+3. Enter voice metadata
+
+4. Assign to characters```bash- Multi-voice support
+
+
+
+#### Edit Dialogue Attribution# Clone the repository- Automatic audio enhancement
+
+1. Select a character in **Characters tab**
+
+2. View all their dialogue linesgit clone https://github.com/dmarsh400/PolyVoxStudio.git- Progress tracking
+
+3. Click any line to reassign speaker
+
+4. Changes save automaticallycd PolyVoxStudio- Chapter-by-chapter processing
+
+
+
+---
+
+
+
+## 🖥️ GPU Support# Linux/Mac### 5. GPU Acceleration
+
+
+
+PolyVox Studio leverages GPU acceleration for significantly faster processing:./install.sh- Automatic GPU detection
+
+
+
+| Task | RTX 3080 | GTX 1080 | K80 | CPU Only |- Multi-GPU load balancing
+
+|------|----------|----------|-----|----------|
+
+| **Character Detection** | 30-60s | 1-2 min | 2-5 min | 5-10 min |# Windows- CPU fallback support
+
+| **Audio Generation** | 15-30s/min | 30-60s/min | 1-2 min/min | 5-10 min/min |
+
+install.bat- Real-time GPU monitoring
+
+### Supported GPUs
+
+```
+
+✅ **Standard Installation:**
+
+- RTX 40 series (4090, 4080, 4070)---
+
+- RTX 30 series (3090, 3080, 3070, 3060)
+
+- RTX 20 series (2080 Ti, 2070, 2060)**Requirements:**
+
+- GTX 16 series (1660 Ti, 1650)
+
+- Python 3.9 or higher## 🎨 Usage
+
+✅ **Legacy Installation:**
+
+- GTX 10 series (1080 Ti, 1070, 1060)- NVIDIA GPU with Compute Capability 6.1+
+
+- GTX 900 series (980 Ti, 970, 960)
+
+- GTX 700 series (780 Ti, 770, 760)- CUDA 12.1+ drivers### Basic Workflow
+
+- Tesla K80, K40
+
+- Quadro K-series- 8GB+ VRAM recommended
+
+
+
+📖 **Full compatibility guide:** [GPU_COMPATIBILITY.md](GPU_COMPATIBILITY.md)1. **Load Your Book**
+
+
+
+---</td>   - Go to the "Book Processing" tab
+
+
+
+## 📖 Documentation<td width="50%">   - Click "Load Book" and select your file
+
+
+
+### Core Guides   - Review detected chapters
+
+- [Installation Guide](docs/INSTALLATION.md) - Detailed setup instructions
+
+- [User Guide](docs/USER_GUIDE.md) - Step-by-step usage tutorial### 🐢 Legacy GPU Installation
+
+- [GPU Compatibility](GPU_COMPATIBILITY.md) - Which installation for your GPU
+
+- [Legacy GPU Setup](LEGACY_GPU_INSTALL.md) - Older GPU installation details**For older GPUs (GTX 700-1080, K80)**2. **Detect Characters**
+
+
+
+### Technical Documentation   - Switch to the "Characters" tab
+
+- [Architecture Overview](docs/ARCHITECTURE.md) - How PolyVox works
+
+- [Character Detection](docs/CHARACTER_DETECTION.md) - BookNLP integration details```bash   - Click "Detect Characters"
+
+- [Voice Cloning](docs/VOICE_CLONING.md) - TTS and voice synthesis
+
+- [API Reference](docs/API.md) - For developers and contributors# Clone the repository   - Review identified characters and dialogue
+
+
+
+### Troubleshootinggit clone https://github.com/dmarsh400/PolyVoxStudio.git
+
+- [FAQ](docs/FAQ.md) - Common questions and answers
+
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Fix common issuescd PolyVoxStudio3. **Assign Voices**
+
+- [Performance Tuning](docs/PERFORMANCE.md) - Optimize for your system
+
+   - Go to the "Voices" tab
+
+---
+
+# Linux/Mac   - Assign a voice to each character
+
+## 🛠️ System Requirements
+
+./install_legacy_gpu.sh   - Preview voices before finalizing
+
+### Minimum Requirements
+
+- **OS:** Windows 10+, Linux (Ubuntu 20.04+), macOS 11+
+
+- **CPU:** 4-core processor (Intel i5 / AMD Ryzen 5 or better)
+
+- **RAM:** 8GB (16GB recommended)# Windows4. **Generate Audio**
+
+- **Storage:** 10GB free space (models + workspace)
+
+- **GPU:** NVIDIA GPU with 6GB VRAM (optional but recommended)install_legacy_gpu.bat   - Switch to "Audio Processing" tab
+
+
+
+### Recommended for Best Experience```   - Click "Generate Audio"
+
+- **CPU:** 8-core processor (Intel i7/i9 or AMD Ryzen 7/9)
+
+- **RAM:** 16GB or more   - Wait for processing to complete
+
+- **GPU:** RTX 3060 or better with 12GB+ VRAM
+
+- **Storage:** SSD with 20GB+ free space**Requirements:**   - Find your audiobook in the `output_audio/` folder
+
+
+
+---- Python 3.9
+
+
+
+## 🎨 Screenshots- NVIDIA GPU with Compute Capability 3.5+### Advanced Features
+
+
+
+<div align="center">- CUDA 11.6 compatible drivers (450.80.02+)
+
+
+
+### Main Interface- 6GB+ VRAM recommended#### Voice Cloning
+
+![Main Interface](docs/screenshots/main_interface.png)
+
+1. Go to "Clone Voices" tab
+
+### Character Detection
+
+![Character Detection](docs/screenshots/characters_tab.png)</td>2. Record or upload a 10-30 second audio sample
+
+
+
+### Voice Assignment</tr>3. Enter voice details
+
+![Voice Cloning](docs/screenshots/clone_voices_tab.png)
+
+</table>4. Click "Save Voice"
+
+### Settings & Configuration
+
+![Settings](docs/screenshots/settings_tab.png)5. Use the cloned voice like any other voice
+
+
+
+</div>👉 **Not sure which installation to use?** Check the [GPU Compatibility Guide](GPU_COMPATIBILITY.md)
+
+
+
+---#### Chapter-by-Chapter Processing
+
+
+
+## 🤝 Contributing### 📦 Dependencies- Process large books one chapter at a time
+
+
+
+We welcome contributions! Whether you're fixing bugs, adding features, or improving documentation, your help makes PolyVox better.- Each chapter is processed independently
+
+
+
+### How to ContributeBoth installations automatically set up:- No cross-contamination between chapters
+
+1. Fork the repository
+
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)- **PyTorch** (2.1+ or 1.13 for legacy)
+
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+
+4. Push to the branch (`git push origin feature/AmazingFeature`)- **Coqui TTS** for voice synthesis---
+
+5. Open a Pull Request
+
+- **BookNLP** for character detection
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+- **SpaCy** for NLP processing## ⚙️ Configuration
+
+### Development Setup
+
+```bash- **CustomTkinter** for the GUI
+
+# Clone your fork
+
+git clone https://github.com/YOUR_USERNAME/PolyVoxStudio.git- And many more...### GPU Setup
+
+cd PolyVoxStudio
+
+
+
+# Install in development mode
+
+pip install -e .---PolyVox Studio automatically detects and uses available GPUs. To force CPU mode:
+
+
+
+# Run tests
+
+python -m pytest tests/
+
+```## 🎬 Quick StartEdit `run_gui.sh` (Linux/Mac) or `run_gui.bat` (Windows):
+
+
+
+---```bash
+
+
+
+## 📜 License### 1️⃣ Launch the Applicationexport CUDA_VISIBLE_DEVICES=""  # Force CPU mode
+
+
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.```
+
+
+
+### Third-Party Licenses```bash
+
+- **BookNLP** - Apache 2.0 License
+
+- **Coqui TTS** - Mozilla Public License 2.0# Standard installation### Audio Quality
+
+- **PyTorch** - BSD-style License
+
+- **SpaCy** - MIT License./run_gui.sh          # Linux/Mac
+
+
+
+---run_gui.bat           # WindowsAudio enhancement requires FFmpeg. Install it:
+
+
+
+## 🙏 Acknowledgments
+
+
+
+PolyVox Studio is built on the shoulders of giants:# Legacy GPU installation**Linux:**
+
+
+
+- **[BookNLP](https://github.com/booknlp/booknlp)** by David Bamman - Character detection and literary NLP./run_gui_legacy.sh   # Linux/Mac```bash
+
+- **[Coqui TTS](https://github.com/coqui-ai/TTS)** - High-quality voice synthesis
+
+- **[XTTS v2](https://huggingface.co/coqui/XTTS-v2)** - Multilingual voice cloningrun_gui_legacy.bat    # Windowssudo apt install ffmpeg
+
+- **[PyTorch](https://pytorch.org/)** - Deep learning framework
+
+- **[CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)** - Modern GUI framework``````
+
+
+
+Special thanks to all contributors and the open-source community!
+
+
+
+---### 2️⃣ Process Your First Book**Mac:**
+
+
+
+## 📞 Support```bash
+
+
+
+### Get Help1. **Click "Load Book"** and select your text filebrew install ffmpeg
+
+- 📖 Check the [Documentation](docs/)
+
+- ❓ Read the [FAQ](docs/FAQ.md)2. **Enter book details** (title, author, genre)```
+
+- 🐛 Report bugs via [Issues](https://github.com/dmarsh400/PolyVoxStudio/issues)
+
+- 💬 Join discussions in [Discussions](https://github.com/dmarsh400/PolyVoxStudio/discussions)3. **Click "Run BookNLP & Attribution"** to detect characters
+
+
+
+### Stay Updated4. **Review character detection** in the Characters tab**Windows:**
+
+- ⭐ Star this repository to stay notified
+
+- 👁️ Watch for updates and releases5. **Assign voices** in the Clone Voices tabDownload from [ffmpeg.org](https://ffmpeg.org/download.html)
+
+- 🍴 Fork to create your own version
 
 6. **Generate audio** in the Settings tab
 
 ---
 
+---
+
+## 🗺️ Roadmap
+
 ### 3️⃣ Advanced Workflows
 
-## 📖 System Requirements
+### Coming Soon
 
-#### Merge Character Variations
+- [ ] EPUB file support## 📖 System Requirements
 
-If "John", "John Smith", and "Mr. Smith" are detected as separate characters:### Minimum
+- [ ] Audio export formats (M4B, OGG)
 
-1. Go to **Characters tab**- Python 3.8+
+- [ ] Batch processing multiple books#### Merge Character Variations
 
-2. Select all variations- 8GB RAM
+- [ ] Cloud rendering options
 
-3. Click **"Merge Characters"**- 10GB free disk space
+- [ ] Mobile companion appIf "John", "John Smith", and "Mr. Smith" are detected as separate characters:### Minimum
+
+
+
+### Future Enhancements1. Go to **Characters tab**- Python 3.8+
+
+- [ ] Emotional tone detection for voice modulation
+
+- [ ] Multi-language support2. Select all variations- 8GB RAM
+
+- [ ] Advanced audio post-processing
+
+- [ ] Character voice training from book descriptions3. Click **"Merge Characters"**- 10GB free disk space
+
+- [ ] API for programmatic access
 
 4. Choose which name to keep- CPU: Multi-core processor
 
+---
 
+
+
+<div align="center">
 
 #### Clone Custom Voices### Recommended
 
+**Made with ❤️ by the PolyVox team**
+
 1. Go to **Clone Voices tab**- Python 3.10+
 
+[⬆ Back to Top](#-polyvox-studio)
+
 2. Click **"Upload Audio"** (5-15 second sample)- 16GB+ RAM
+
+</div>
 
 3. Enter voice metadata- 20GB+ free disk space
 
