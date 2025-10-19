@@ -36,10 +36,12 @@ git clone https://github.com/dmarsh400/PolyVoxStudio.git
 cd PolyVoxStudio
 
 # Linux / macOS
-./install.sh
+conda create -n PolyVox python=3.9
+conda activate PolyVox
+Python install.py
 
 # Windows
-install.bat
+INSTALL_WINDOWS.bat
 ```
 
 Launch:
