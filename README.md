@@ -41,6 +41,7 @@ conda activate PolyVox
 Python install.py
 
 # Windows
+Double Click
 INSTALL_WINDOWS.bat
 ```
 
