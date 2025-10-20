@@ -10,6 +10,14 @@ import platform
 import shutil
 from pathlib import Path
 
+# -----------------------------
+# GPU utilities (optional CUDA)
+# -----------------------------
+CUDA_TORCH_VERSION = "2.1.0"
+CUDA_TORCHVISION_VERSION = "0.16.0"
+CUDA_TORCHAUDIO_VERSION = "2.1.0"
+CUDA_TAG = "cu118"  # CUDA 11.8 prebuilt wheels
+
 def get_platform():
     """Detect the operating system."""
     system = platform.system().lower()
@@ -33,6 +41,62 @@ def run_command(cmd, shell=False):
         return True, result.stdout
     except subprocess.CalledProcessError as e:
         return False, e.stderr
+
+def has_nvidia_gpu() -> bool:
+    """Best-effort detection of an NVIDIA GPU using nvidia-smi."""
+    # macOS generally won't have NVIDIA GPU support
+    if get_platform() == 'mac':
+        return False
+    ok, _ = run_command(['nvidia-smi'])
+    return ok
+
+def install_cuda_pytorch():
+    """Install CUDA-enabled PyTorch wheels using the official cu118 index.
+
+    This replaces any existing CPU wheels for torch/vision/audio.
+    """
+    print("\n⚙️  Preparing CUDA-enabled PyTorch installation (CUDA 11.8)...")
+    # Uninstall existing torch family first to avoid conflicts
+    run_command([sys.executable, '-m', 'pip', 'uninstall', '-y', 'torch', 'torchvision', 'torchaudio'])
+
+    # Install CUDA wheels from pytorch cu118 index
+    wheels = [
+        f'torch=={CUDA_TORCH_VERSION}+{CUDA_TAG}',
+        f'torchvision=={CUDA_TORCHVISION_VERSION}+{CUDA_TAG}',
+        f'torchaudio=={CUDA_TORCHAUDIO_VERSION}+{CUDA_TAG}',
+    ]
+    cmd = [sys.executable, '-m', 'pip', 'install', '--index-url', 'https://download.pytorch.org/whl/cu118'] + wheels
+    ok, out = run_command(cmd)
+    if ok:
+        print("✅ Installed CUDA wheels for torch/vision/audio (CUDA 11.8)")
+        return True
+    else:
+        print("⚠️  Failed to install CUDA wheels. Falling back to CPU wheels...")
+        cpu_cmd = [sys.executable, '-m', 'pip', 'install',
+                   f'torch=={CUDA_TORCH_VERSION}',
+                   f'torchvision=={CUDA_TORCHVISION_VERSION}',
+                   f'torchaudio=={CUDA_TORCHAUDIO_VERSION}']
+        ok2, out2 = run_command(cpu_cmd)
+        if ok2:
+            print("✅ Installed CPU wheels for torch/vision/audio")
+            return True
+        print(f"❌ PyTorch installation failed:\n{out2}")
+        return False
+
+def verify_cuda_runtime():
+    """Verify torch CUDA availability and print a short summary."""
+    code = (
+        "import torch;\n"
+        "print('torch', torch.__version__);\n"
+        "print('cuda_available', torch.cuda.is_available());\n"
+        "print('cuda', getattr(torch.version, 'cuda', None));\n"
+        "print('device_count', torch.cuda.device_count())\n"
+    )
+    ok, out = run_command([sys.executable, '-c', code])
+    if ok:
+        print(out.strip())
+    else:
+        print("⚠️  Could not verify CUDA runtime.")
 
 def install_dependencies():
     """Install Python dependencies."""
@@ -217,13 +281,35 @@ def main():
     install_dir = os.path.abspath(os.path.dirname(__file__))
     print(f"✅ Installation directory: {install_dir}")
     
-    # Install dependencies
+    # Install dependencies (CPU-first; we may upgrade to CUDA wheels below)
     if not install_dependencies():
         print("\n❌ Installation failed!")
         sys.exit(1)
     
     # Download spaCy model
     download_spacy_model()
+
+    # Optional: NVIDIA GPU support
+    try:
+        print("\n" + "=" * 60)
+        if has_nvidia_gpu():
+            print("🖥️  NVIDIA GPU detected (via nvidia-smi).")
+            choice = os.environ.get('POLYVOX_ENABLE_GPU', '').lower()
+            if choice not in {'y', 'n'}:
+                # Ask user only if not preseeded via env var
+                choice = input("Enable NVIDIA GPU acceleration with CUDA 11.8? (y/n): ").strip().lower()
+            if choice == 'y':
+                if install_cuda_pytorch():
+                    print("\n🔍 Verifying CUDA setup...")
+                    verify_cuda_runtime()
+                else:
+                    print("⚠️  Continuing without GPU acceleration.")
+            else:
+                print("Skipping GPU acceleration.")
+        else:
+            print("No NVIDIA GPU detected. Skipping CUDA installation.")
+    except Exception as e:
+        print(f"⚠️  GPU setup step encountered an issue: {e}")
     
     # Ask about desktop icon
     print("\n" + "=" * 60)
@@ -244,7 +330,8 @@ def main():
     print("\nTo run PolyVox Studio:")
     print(f"  cd {install_dir}")
     if platform_type == 'windows':
-        print("  run_gui.bat")
+        print("  PolyVoxStudio.bat   (if you used the Windows installer)")
+        print("  or run_gui.bat      (legacy/conda path)")
     else:
         print("  ./run_gui.sh")
     print("\nOr use the desktop icon if you created one.")
