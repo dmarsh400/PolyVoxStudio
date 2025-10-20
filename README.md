@@ -51,7 +51,7 @@ Launch:
 ./run_gui.sh
 
 # Windows
-run_gui.bat
+PolyVox_Studio.bat (created after install, icon should be sent to desktop)
 ```
 
 ### Option B — Legacy (older NVIDIA GPUs)
@@ -66,7 +66,8 @@ cd PolyVoxStudio
 ./run_gui_legacy.sh
 
 # Windows
-install_legacy_gpu.bat
+Double Click
+INSTALL_WINDOWS.bat (Select Option 5)
 run_gui_legacy.bat
 ```
 
