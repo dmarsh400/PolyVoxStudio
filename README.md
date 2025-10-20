@@ -40,9 +40,15 @@ conda create -n PolyVox python=3.9
 conda activate PolyVox
 Python install.py
 
-# Windows
-Double Click
-INSTALL_WINDOWS.bat
+Windows install:
+Double-click INSTALL_WINDOWS.bat
+Choose:
+[1] Simple Installation (recommended)
+[5] Legacy GPU Installation (older NVIDIA GPUs)
+Launch:
+New install: use the desktop shortcut “PolyVox Studio.bat” (or PolyVoxStudio.bat in the folder)
+Legacy GPU: use run_gui_legacy.bat
+Note: run_gui.bat is for an older conda-based setup and isn’t used by the new installer.
 ```
 
 Launch:
