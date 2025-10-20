@@ -66,6 +66,11 @@ echo       • Uses legacy CUDA/Torch pins
 echo       • Runs install_legacy_gpu.bat
 echo       • Pair with run_gui_legacy.bat
 echo.
+echo %YELLOW%[6] Enable GPU (CUDA 11.8)%RESET% - For modern NVIDIA GPUs (RTX/Turing/Ampere/Ada)
+echo       • Uses Python venv created by Simple/Advanced install
+echo       • Installs CUDA 11.8 wheels for torch/torchvision/torchaudio
+echo       • Verifies GPU availability; falls back to CPU if needed
+echo.
 echo %BLUE%Troubleshooting:%RESET%
 echo %YELLOW%[T] Test Python Installation%RESET% - Detect Python on your system
 echo %YELLOW%[H] Help%RESET% - View troubleshooting guide
@@ -74,13 +79,14 @@ echo %YELLOW%[Q] Quit%RESET%
 echo.
 
 :choice
-set /p choice=%BLUE%Enter your choice (1-5, T, H, Q): %RESET%
+set /p choice=%BLUE%Enter your choice (1-6, T, H, Q): %RESET%
 
 if /i "%choice%"=="1" goto simple
 if /i "%choice%"=="2" goto advanced  
 if /i "%choice%"=="3" goto conda
 if /i "%choice%"=="4" goto manual
 if /i "%choice%"=="5" goto legacy
+if /i "%choice%"=="6" goto gpu
 if /i "%choice%"=="t" goto test
 if /i "%choice%"=="h" goto help
 if /i "%choice%"=="q" goto quit
@@ -133,6 +139,87 @@ if exist "run_gui_legacy.bat" (
     if /i "!runlegacy!"=="Y" (
         call run_gui_legacy.bat
         goto end
+    )
+)
+goto end
+
+:gpu
+cls
+echo.
+echo %GREEN%========================================%RESET%
+echo %GREEN% Enabling GPU (CUDA 11.8) in venv%RESET%
+echo %GREEN%========================================%RESET%
+echo.
+rem Ensure venv exists
+if not exist "venv\Scripts\python.exe" (
+    echo %RED%ERROR: Python virtual environment not found!%RESET%
+    echo %YELLOW%Please run option [1] Simple Installation first to create venv.%RESET%
+    echo %YELLOW%After that, return here to enable GPU support.%RESET%
+    pause
+    goto choice
+)
+
+echo %BLUE%Detecting NVIDIA GPU...%RESET%
+where nvidia-smi >nul 2>&1
+if %errorLevel% equ 0 (
+    for /f "usebackq tokens=*" %%A in (`nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2^>nul`) do (
+        echo   NVIDIA GPU detected: %%A
+        goto :gpu_prompt
+    )
+)
+wmic path win32_VideoController get Name | find /i "NVIDIA" >nul 2>&1
+if %errorLevel% equ 0 (
+    echo   NVIDIA GPU detected (via WMI)
+) else (
+    echo   %YELLOW%No NVIDIA GPU detected automatically. You can still install CUDA wheels if you know you have one.%RESET%
+)
+
+:gpu_prompt
+set /p gpuyes=%BLUE%Proceed to install CUDA 11.8 PyTorch wheels into venv? (Y/N): %RESET%
+if /i "%gpuyes%" NEQ "Y" (
+    echo Operation cancelled.
+    goto choice
+)
+
+echo.
+echo %BLUE%Activating virtual environment...%RESET%
+call venv\Scripts\activate.bat
+if %errorLevel% neq 0 (
+    echo %RED%ERROR: Could not activate virtual environment%RESET%
+    pause
+    goto choice
+)
+
+echo %BLUE%Removing existing torch/vision/audio (if present)...%RESET%
+pip uninstall -y torch torchvision torchaudio >nul 2>&1
+
+echo %BLUE%Installing CUDA 11.8 wheels for torch/vision/audio...%RESET%
+pip install --index-url https://download.pytorch.org/whl/cu118 ^
+  torch==2.1.0+cu118 torchvision==0.16.0+cu118 torchaudio==2.1.0+cu118
+if %errorLevel% neq 0 (
+    echo %RED%ERROR: Failed to install CUDA 11.8 wheels.%RESET%
+    echo %YELLOW%Falling back to CPU-only wheels...%RESET%
+    pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0
+)
+
+echo.
+echo %BLUE%Verifying GPU availability...%RESET%
+python -c "import torch;print('torch',torch.__version__);print('cuda available',torch.cuda.is_available());print('device count',torch.cuda.device_count());print('cuda',getattr(torch.version,'cuda',None))" 2>&1
+if %errorLevel% neq 0 (
+    echo %YELLOW%Warning: Verification encountered an issue. The installation may still be usable.%RESET%
+)
+
+echo.
+echo %GREEN%GPU enablement step complete.%RESET%
+echo %YELLOW%If cuda_available=False above, update NVIDIA drivers and try again.%RESET%
+echo.
+set /p launchnow=%BLUE%Launch PolyVox Studio now? (Y/N): %RESET%
+if /i "%launchnow%"=="Y" (
+    if exist PolyVoxStudio.bat (
+        call PolyVoxStudio.bat
+    ) else (
+        echo Launcher not found. You can run: call venv\Scripts\activate.bat ^&^& python -m app.main
+        pause
     )
 )
 goto end
