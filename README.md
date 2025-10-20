@@ -43,8 +43,9 @@ Python install.py
 Windows install:
 Double-click INSTALL_WINDOWS.bat
 Choose:
-[1] Simple Installation (recommended)
+[1] Simple Installation (recommended for CPU only)
 [5] Legacy GPU Installation (older NVIDIA GPUs)
+[6] for GPU Installation CUDA support (recommended for newer GPUs)
 Launch:
 New install: use the desktop shortcut “PolyVox Studio.bat” (or PolyVoxStudio.bat in the folder)
 Legacy GPU: use run_gui_legacy.bat
