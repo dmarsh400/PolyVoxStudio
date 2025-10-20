@@ -36,7 +36,7 @@ git clone https://github.com/dmarsh400/PolyVoxStudio.git
 cd PolyVoxStudio
 
 # Linux / macOS
-conda create -n PolyVox python=3.9
+conda create -n PolyVox python=3.11
 conda activate PolyVox
 python install.py
 
