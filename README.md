@@ -57,7 +57,7 @@ Launch:
 ./run_gui.sh
 
 # Windows
-PolyVox_Studio.bat (created after install, icon should be sent to desktop)
+PolyVox_Studio.bat (created after install, Shortcut should be sent to desktop)
 ```
 
 ### Option B — Legacy (older NVIDIA GPUs)
