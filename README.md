@@ -38,7 +38,7 @@ cd PolyVoxStudio
 # Linux / macOS
 conda create -n PolyVox python=3.9
 conda activate PolyVox
-Python install.py
+python install.py
 
 Windows install:
 Double-click INSTALL_WINDOWS.bat
