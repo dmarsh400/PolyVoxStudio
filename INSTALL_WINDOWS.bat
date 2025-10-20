@@ -1,223 +1,285 @@
 @echo off
 REM ======================================================================
-REM PolyVox Studio - Complete Fixed Installer
-REM Removes color codes and ensures proper package installation
+REM PolyVox Studio - Windows Installation Launcher  
 REM ======================================================================
 setlocal enabledelayedexpansion
 
-cls
+:: Enable ANSI color support on Windows 10+
+reg add HK
 echo.
-echo =================================================================
-echo              PolyVox Studio - Windows Installer
-echo                 Professional Audiobook Generation
-echo =================================================================
+echo %CYAN%██████╗  ██████╗ ██╗  ██╗   ██╗██╗   ██╗ ██████╗ ██╗  ██╗%RESET%
+echo %CYAN%██╔══██╗██╔═══██╗██║  ╚██╗ ██╔╝██║   ██║██╔═══██╗╚██╗██╔╝%RESET%
+echo %CYAN%██████╔╝██║   ██║██║   ╚████╔╝ ██║   ██║██║   ██║ ╚███╔╝ %RESET%
+echo %CYAN%██╔═══╝ ██║   ██║██║    ╚██╔╝  ╚██╗ ██╔╝██║   ██║ ██╔██╗ %RESET%
+echo %CYAN%██║     ╚██████╔╝███████╗██║    ╚████╔╝ ╚██████╔╝██╔╝ ██╗%RESET%
+echo %CYAN%╚═╝      ╚═════╝ ╚══════╝╚═╝     ╚═══╝   ╚═════╝ ╚═╝  ╚═╝%RESET%
+echo.
+echo %MAGENTA%                    PolyVox Studio%RESET%
+echo %BLUE%                Professional Audiobook Generation%RESET%
+echo %CYAN%================================================================%RESET%
+echo.
+echo %YELLOW%Welcome to the PolyVox Studio installer!%RESET%
 echo.
 
-:: Check Python
-echo [1/6] Checking Python installation...
-
-set "PYTHON_CMD="
-for %%p in (python python3 py) do (
-    %%p --version >nul 2>&1
-    if !errorLevel! equ 0 (
-        set "PYTHON_CMD=%%p"
-        goto :python_found
+:: Quick Python check
+python --version >nul 2>&1
+if %errorLevel% neq 0 (
+    py --version >nul 2>&1
+    if !errorLevel! neq 0 (
+        echo %RED%⚠ WARNING: Python may not be properly installed or in PATH%RESET%
+        echo.
+        echo %YELLOW%[T] Test Python Installation%RESET% - Run diagnostic tool
+        echo %YELLOW%[H] Help with Python Setup%RESET% - Show installation guide
+        echo.
     )
 )
 
+echo %BLUE%This installer will:%RESET%
+echo   • Create a Python virtual environment
+echo   • Install all required dependencies  
+echo   • Create desktop and Start Menu shortcuts
+echo   • Set up an easy uninstaller
+echo.
+echo %GREEN%Choose your installation method:%RESET%
+echo.
+echo %YELLOW%[1] Simple Installation%RESET% - Quick setup (RECOMMENDED)
+echo       • Uses Python virtual environment
+echo       • Creates desktop shortcut  
+echo       • 5-10 minute install
+echo.
+echo %YELLOW%[2] Advanced Installation%RESET% - Full features (PowerShell)
+echo       • Custom icon support
+echo       • Start Menu integration
+echo       • Requires PowerShell execution
+echo.
+echo %YELLOW%[3] Conda Installation%RESET% - For Anaconda users
+echo       • Uses conda environment
+echo       • Better dependency management
+echo       • Requires conda/miniconda
+echo.
+echo %YELLOW%[4] Manual Installation%RESET% - Python script (cross-platform)
+echo       • Direct Python installer
+echo       • More control over setup
+echo.
+echo %YELLOW%[5] Legacy GPU Installation%RESET% - For older NVIDIA GPUs
+echo       • Uses legacy CUDA/Torch pins
+echo       • Runs install_legacy_gpu.bat
+echo       • Pair with run_gui_legacy.bat
+echo.
+echo %BLUE%Troubleshooting:%RESET%
+echo %YELLOW%[T] Test Python Installation%RESET% - Detect Python on your system
+echo %YELLOW%[H] Help%RESET% - View troubleshooting guide
+echo.
+echo %YELLOW%[Q] Quit%RESET%
+echo.
+
+:choice
+set /p choice=%BLUE%Enter your choice (1-5, T, H, Q): %RESET%
+
+if /i "%choice%"=="1" goto simple
+if /i "%choice%"=="2" goto advanced  
+if /i "%choice%"=="3" goto conda
+if /i "%choice%"=="4" goto manual
+if /i "%choice%"=="5" goto legacy
+if /i "%choice%"=="t" goto test
+if /i "%choice%"=="h" goto help
+if /i "%choice%"=="q" goto quit
+
+echo %YELLOW%Invalid choice. Please try again.%RESET%
+echo.
+goto choice
+
+:simple
 cls
 echo.
-echo =================================================================
-echo                    ERROR: Python Not Found!
-echo =================================================================
+echo %GREEN%========================================%RESET%
+echo %GREEN% Starting Simple Installation%RESET%
+echo %GREEN%========================================%RESET%
 echo.
-echo Python 3.8 or higher is required but was not found.
+if not exist "install_simple.bat" (
+    echo %RED%ERROR: install_simple.bat not found!%RESET%
+    pause
+    goto choice
+)
+call install_simple.bat
+goto end
+
+:legacy
+cls
 echo.
-echo Please install Python from: https://python.org/downloads/
+echo %GREEN%========================================%RESET%
+echo %GREEN% Starting Legacy GPU Installation%RESET%
+echo %GREEN%========================================%RESET%
 echo.
-echo IMPORTANT: During installation, check "Add Python to PATH"
+if not exist "install_legacy_gpu.bat" (
+    echo %RED%ERROR: install_legacy_gpu.bat not found in this folder!%RESET%
+    echo %YELLOW%Tip: Make sure you're running this from the PolyVox Studio folder.%RESET%
+    pause
+    goto choice
+)
+call install_legacy_gpu.bat
+if %errorLevel% neq 0 (
+    echo.
+    echo %RED%Legacy GPU installation reported an error.%RESET%
+    echo %YELLOW%Please review the output above and try again.%RESET%
+    pause
+    goto choice
+)
 echo.
-echo For detailed help, see: PYTHON_NOT_FOUND_FIX.md
+echo %GREEN%Legacy GPU environment installed.%RESET%
+echo.
+if exist "run_gui_legacy.bat" (
+    set /p runlegacy=%BLUE%Launch the Legacy GUI now? (Y/N): %RESET%
+    if /i "!runlegacy!"=="Y" (
+        call run_gui_legacy.bat
+        goto end
+    )
+)
+goto end
+
+:advanced
+cls
+echo.
+echo %GREEN%========================================%RESET%
+echo %GREEN% Starting Advanced Installation%RESET%
+echo %GREEN%========================================%RESET%
+echo.
+if not exist "install_advanced.ps1" (
+    echo %YELLOW%install_advanced.ps1 not found. Using simple installation...%RESET%
+    timeout /t 2 >nul
+    call install_simple.bat
+    goto end
+)
+powershell -ExecutionPolicy Bypass -File "install_advanced.ps1"
+if %errorLevel% neq 0 (
+    echo.
+    echo %YELLOW%PowerShell installation encountered an issue.%RESET%
+    echo %YELLOW%Falling back to simple installation...%RESET%
+    timeout /t 3 >nul
+    call install_simple.bat
+)
+goto end
+
+:conda
+cls
+echo.
+echo %GREEN%========================================%RESET%
+echo %GREEN% Starting Conda Installation%RESET%
+echo %GREEN%========================================%RESET%
+echo.
+conda --version >nul 2>&1
+if %errorLevel% neq 0 (
+    echo %RED%ERROR: Conda not found!%RESET%
+    echo.
+    echo %YELLOW%Conda/Miniconda is required for this installation method.%RESET%
+    echo Download from: https://docs.conda.io/en/latest/miniconda.html
+    echo.
+    echo %BLUE%Falling back to simple installation...%RESET%
+    timeout /t 3 >nul
+    call install_simple.bat
+    goto end
+)
+if not exist "install_windows_oneclick.bat" (
+    echo %YELLOW%install_windows_oneclick.bat not found. Using simple installation...%RESET%
+    timeout /t 2 >nul
+    call install_simple.bat
+    goto end
+)
+call install_windows_oneclick.bat
+goto end
+
+:manual
+cls
+echo.
+echo %GREEN%========================================%RESET%
+echo %GREEN% Starting Manual Installation%RESET%
+echo %GREEN%========================================%RESET%
+echo.
+python install.py
+if %errorLevel% neq 0 (
+    py install.py
+)
+goto end
+
+:test
+cls
+echo.
+echo %BLUE%Running Python Detection Tool...%RESET%
+echo.
+if exist "find_python.bat" (
+    call find_python.bat
+) else (
+    echo %YELLOW%Testing Python...%RESET%
+    echo.
+    python --version 2>&1
+    echo.
+    py --version 2>&1
+    echo.
+    where python 2>&1
+    echo.
+    pause
+)
+goto choice
+
+:help
+cls
+echo.
+echo %BLUE%========================================%RESET%
+echo %BLUE% Installation Help%RESET%
+echo %BLUE%========================================%RESET%
+echo.
+echo %YELLOW%Common Issues and Solutions:%RESET%
+echo.
+echo %GREEN%1. "Python not found" error:%RESET%
+echo    - Install Python from https://www.python.org/downloads/
+echo    - During installation, CHECK "Add Python to PATH"
+echo    - Restart Command Prompt after installation
+echo    - Run option [T] to test Python detection
+echo.
+echo %GREEN%2. Permission errors:%RESET%
+echo    - Right-click this file and "Run as Administrator"
+echo    - Close antivirus temporarily during installation
+echo.
+echo %GREEN%3. Package installation fails:%RESET%
+echo    - Check internet connection
+echo    - Disable VPN temporarily
+echo    - Try option [1] Simple Installation
+echo.
+echo %GREEN%4. Already have Python but installer doesn't detect it:%RESET%
+echo    - Open Command Prompt and type: where python
+echo    - Copy the path shown
+echo    - Add to System Environment Variables PATH
+echo    - Or: Reinstall Python with "Add to PATH" checked
+echo.
+echo %GREEN%5. Need more help:%RESET%
+echo    - Read WINDOWS_INSTALL_README.md in this folder
+echo    - Check docs/FAQ.md
+echo    - Visit GitHub repository for support
+echo.
+echo %BLUE%Press any key to return to menu...%RESET%
+pause >nul
+goto choice
+
+:quit
+cls
+echo.
+echo %YELLOW%Installation cancelled.%RESET%
+echo.
+echo %BLUE%Need help? Run this installer again and choose option [H]%RESET%
+echo %BLUE%Or read WINDOWS_INSTALL_README.md%RESET%
+echo.
+timeout /t 3 >nul
+exit /b 0
+
+:end
+echo.
+echo %CYAN%================================================================%RESET%
+echo %GREEN%Thank you for choosing PolyVox Studio!%RESET%
+echo.
+echo %BLUE%If you encountered issues:%RESET%
+echo  - Run find_python.bat to diagnose Python problems
+echo  - Read WINDOWS_INSTALL_README.md for detailed help
+echo  - Try running as Administrator
 echo.
 pause
-exit /b 1
-
-:python_found
-for /f "tokens=*" %%i in ('%PYTHON_CMD% --version 2^>^&1') do set PYTHON_VERSION=%%i
-echo    %PYTHON_VERSION% found
-echo.
-
-:: Check Python version
-%PYTHON_CMD% -c "import sys; exit(0 if sys.version_info >= (3,8) else 1)" >nul 2>&1
-if !errorLevel! neq 0 (
-    echo ERROR: Python 3.8 or higher required
-    echo Current version: %PYTHON_VERSION%
-    pause
-    exit /b 1
-)
-
-:: Get installation directory
-set "INSTALL_DIR=%~dp0"
-set "INSTALL_DIR=%INSTALL_DIR:~0,-1%"
-
-:: Create virtual environment
-echo [2/6] Creating virtual environment...
-if exist venv (
-    echo    Virtual environment already exists, removing old one...
-    rmdir /s /q venv
-)
-
-%PYTHON_CMD% -m venv venv
-if !errorLevel! neq 0 (
-    echo.
-    echo ERROR: Could not create virtual environment
-    echo Try running: %PYTHON_CMD% -m pip install virtualenv
-    pause
-    exit /b 1
-)
-echo    Virtual environment created
-echo.
-
-:: Activate virtual environment
-echo [3/6] Activating virtual environment...
-call venv\Scripts\activate.bat
-if !errorLevel! neq 0 (
-    echo ERROR: Could not activate virtual environment
-    pause
-    exit /b 1
-)
-echo    Environment activated
-echo.
-
-:: Upgrade pip
-echo [4/6] Upgrading pip...
-python -m pip install --upgrade pip >nul 2>&1
-echo    Pip upgraded
-echo.
-
-:: Install packages
-echo [5/6] Installing packages (this may take 5-10 minutes)...
-echo    Please wait, downloading and installing dependencies...
-echo.
-
-:: Try minimal requirements first
-if exist requirements_min.txt (
-    echo    Trying minimal requirements...
-    python -m pip install -r requirements_min.txt
-    if !errorLevel! equ 0 (
-        echo    Minimal requirements installed successfully
-        goto :packages_done
-    )
-)
-
-:: Fall back to full requirements
-if exist requirements.txt (
-    echo    Installing full requirements...
-    python -m pip install -r requirements.txt
-    if !errorLevel! neq 0 (
-        echo.
-        echo ERROR: Package installation failed
-        echo Please check your internet connection and try again
-        echo.
-        pause
-        exit /b 1
-    )
-    echo    Full requirements installed successfully
-)
-
-:packages_done
-echo.
-
-:: Verify critical packages
-echo    Verifying installation...
-python -c "import customtkinter" >nul 2>&1
-if !errorLevel! neq 0 (
-    echo    WARNING: customtkinter not found, installing...
-    python -m pip install customtkinter
-)
-
-python -c "import spacy" >nul 2>&1
-if !errorLevel! neq 0 (
-    echo    WARNING: spacy not found, installing...
-    python -m pip install spacy
-)
-
-:: Download spaCy model
-echo [6/6] Downloading language model...
-python -m spacy download en_core_web_sm >nul 2>&1
-if !errorLevel! equ 0 (
-    echo    Language model downloaded
-) else (
-    echo    Warning: Language model download failed (will retry on first run)
-)
-echo.
-
-:: Create launcher script
-echo Creating launcher script...
-(
-echo @echo off
-echo REM PolyVox Studio Launcher
-echo cd /d "%INSTALL_DIR%"
-echo call venv\Scripts\activate.bat
-echo if %%errorLevel%% neq 0 (
-echo     echo ERROR: Could not activate environment
-echo     pause
-echo     exit /b 1
-echo ^)
-echo python -m app.main
-echo if %%errorLevel%% neq 0 (
-echo     echo.
-echo     echo ERROR: Application failed to start
-echo     echo Check that all packages are installed correctly
-echo     pause
-echo ^)
-) > PolyVoxStudio.bat
-
-:: Create desktop shortcut
-set "DESKTOP=%USERPROFILE%\Desktop"
-copy /y PolyVoxStudio.bat "%DESKTOP%\PolyVox Studio.bat" >nul 2>&1
-if !errorLevel! equ 0 (
-    echo Desktop shortcut created: "%DESKTOP%\PolyVox Studio.bat"
-) else (
-    echo Warning: Could not create desktop shortcut
-)
-echo.
-
-:: Create uninstaller
-(
-echo @echo off
-echo echo Uninstalling PolyVox Studio...
-echo cd /d "%INSTALL_DIR%"
-echo rmdir /s /q venv
-echo del /q PolyVoxStudio.bat
-echo del /q "%DESKTOP%\PolyVox Studio.bat" 2^>nul
-echo echo Uninstall complete
-echo pause
-echo del /q "%%~f0"
-) > uninstall.bat
-
-echo =================================================================
-echo                  Installation Complete!
-echo =================================================================
-echo.
-echo PolyVox Studio has been installed successfully!
-echo.
-echo To launch the application:
-echo   1. Double-click "PolyVox Studio.bat" on your desktop
-echo   2. Or run PolyVoxStudio.bat from this folder
-echo.
-echo To uninstall: run uninstall.bat
-echo.
-echo =================================================================
-echo.
-set /p launch="Would you like to launch PolyVox Studio now? (Y/N): "
-if /i "%launch%"=="Y" (
-    echo.
-    echo Launching PolyVox Studio...
-    echo.
-    call PolyVoxStudio.bat
-) else (
-    echo.
-    echo You can launch PolyVox Studio anytime from your desktop.
-    pause
-)
+exit /b 0
