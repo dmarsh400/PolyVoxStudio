@@ -145,7 +145,7 @@ echo %GREEN%✓ Packages installed%RESET%
 
 :: Download spaCy model
 echo %BLUE%Downloading language model...%RESET%
-%PYTHON_CMD% -m spacy download en_core_web_sm --quiet >nul 2>&1
+%PYTHON_CMD% -m spacy download en_core_web_md --quiet >nul 2>&1
 if %errorLevel% equ 0 (
     echo %GREEN%✓ Language model ready%RESET%
 ) else (
