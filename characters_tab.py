@@ -276,11 +276,15 @@ class CharactersTab(ctk.CTkFrame):
             messagebox.showinfo("Info", "Select 2 or more characters to merge.")
             return
         names = [self.char_list.get(idx) for idx in selection]
+        
+        self.log_debug(f"[CharactersTab] Merge selected - names: {names}, selection indices: {selection}")
 
         # Dropdown to pick survivor
         survivor = self._prompt_survivor_dropdown(names)
         if not survivor:
             return
+        
+        self.log_debug(f"[CharactersTab] User selected survivor: '{survivor}'")
 
         # Update chapters
         updated_count = 0
@@ -357,25 +361,49 @@ class CharactersTab(ctk.CTkFrame):
     def _prompt_survivor_dropdown(self, names):
         win = tk.Toplevel(self)
         win.title("Merge Characters")
-        tk.Label(win, text="Select the surviving character:").pack(pady=5)
+        
+        info_text = f"Merging {len(names)} characters:\n{', '.join(names)}\n\nSelect the surviving character:"
+        tk.Label(win, text=info_text, justify="left").pack(pady=10, padx=10)
 
-        survivor_var = tk.StringVar(value=names[0])
-        dropdown = ttk.Combobox(win, textvariable=survivor_var, values=names, state="readonly")
-        dropdown.pack(pady=5)
+        # Create dropdown without StringVar to avoid binding issues
+        dropdown = ttk.Combobox(win, values=names, state="readonly", width=30)
+        dropdown.set(names[0])  # Set default
+        dropdown.pack(pady=5, padx=10)
+        dropdown.focus_set()
 
-        survivor = {"value": None}
+        result = {"value": None}
 
         def confirm():
-            survivor["value"] = survivor_var.get()
+            # Get value directly from dropdown widget
+            selected = dropdown.get()
+            self.log_debug(f"[_prompt_survivor_dropdown] User selected from dropdown: '{selected}'")
+            if selected and selected in names:
+                result["value"] = selected
+            else:
+                self.log_debug(f"[_prompt_survivor_dropdown] WARNING: Invalid selection '{selected}', defaulting to first")
+                result["value"] = names[0]
+            win.destroy()
+        
+        def cancel():
+            self.log_debug(f"[_prompt_survivor_dropdown] User cancelled")
+            result["value"] = None
             win.destroy()
 
-        tk.Button(win, text="OK", command=confirm).pack(pady=5)
+        button_frame = tk.Frame(win)
+        button_frame.pack(pady=10)
+        tk.Button(button_frame, text="OK", command=confirm, width=10, bg="green", fg="white").pack(side="left", padx=5)
+        tk.Button(button_frame, text="Cancel", command=cancel, width=10).pack(side="left", padx=5)
+        
+        # Bind Enter key to confirm
+        dropdown.bind("<Return>", lambda e: confirm())
 
         win.transient(self)
-        win.wait_visibility()   # ? ensures window is mapped before grab
+        win.wait_visibility()
         win.grab_set()
         self.wait_window(win)
-        return survivor["value"]
+        
+        self.log_debug(f"[_prompt_survivor_dropdown] Final result: '{result['value']}'")
+        return result["value"]
 
     def reassign_selected_lines(self):
         selection = self.char_list.curselection()
