@@ -53,6 +53,11 @@ class CharactersTab(ctk.CTkFrame):
         self._text_labels = []  # Store references to text labels for dynamic resizing
 
         self.narrator_color = "#555555"
+        
+        # Search and filter state
+        self.search_var = tk.StringVar()
+        self.filter_character_var = tk.StringVar(value="All Characters")
+        
         self.build_layout()
 
     # ---------- Book text setter ----------
@@ -131,6 +136,39 @@ class CharactersTab(ctk.CTkFrame):
         
         ctk.CTkButton(left, text="Send to Voices", command=self.send_to_voices).pack(pady=15)
 
+        # Search and Filter Bar (at top of right panel)
+        search_filter_frame = ctk.CTkFrame(right, border_width=2, border_color="gray")
+        search_filter_frame.pack(side="top", fill="x", padx=5, pady=5)
+        
+        # Search box
+        search_label = ctk.CTkLabel(search_filter_frame, text="Search Text:", font=("Arial", 13))
+        search_label.pack(side="left", padx=5, pady=5)
+        
+        self.search_entry = ctk.CTkEntry(search_filter_frame, textvariable=self.search_var, width=250, placeholder_text="Type to search in dialogue lines...")
+        self.search_entry.pack(side="left", padx=5, pady=5)
+        self.search_entry.bind("<Return>", lambda e: self.do_search())
+        self.search_entry.bind("<KP_Enter>", lambda e: self.do_search())
+        
+        search_btn = ctk.CTkButton(search_filter_frame, text="Search", command=self.do_search, width=70)
+        search_btn.pack(side="left", padx=2, pady=5)
+        
+        clear_search_btn = ctk.CTkButton(search_filter_frame, text="Clear", command=self.clear_search, width=60)
+        clear_search_btn.pack(side="left", padx=2, pady=5)
+        
+        # Character filter dropdown
+        filter_label = ctk.CTkLabel(search_filter_frame, text="Filter by Character:", font=("Arial", 13))
+        filter_label.pack(side="left", padx=(20, 5), pady=5)
+        
+        self.filter_dropdown = ctk.CTkComboBox(
+            search_filter_frame,
+            variable=self.filter_character_var,
+            values=["All Characters"],
+            width=200,
+            command=self.on_filter_changed
+        )
+        self.filter_dropdown.pack(side="left", padx=5, pady=5)
+
+        # Canvas and scrollbar
         self.canvas = tk.Canvas(right)
         self.scrollbar = tk.Scrollbar(right, orient="vertical", command=self.canvas.yview)
         self.scroll_frame = tk.Frame(self.canvas)
@@ -737,7 +775,40 @@ class CharactersTab(ctk.CTkFrame):
             app.voices_tab.set_characters(chars)
             messagebox.showinfo("Info", "Characters sent to Voices tab.")
             self.log_debug("[CharactersTab] Sent characters to Voices tab.")
-        
+    
+    # ---------- Search and Filter ----------
+    def do_search(self):
+        """Execute the search with the current search box text."""
+        search_text = self.search_entry.get().strip()
+        self.search_var.set(search_text)
+        self.log_debug(f"[CharactersTab] Search initiated: '{search_text}'")
+        self.apply_filters()
+    
+    def clear_search(self):
+        """Clear the search box."""
+        self.search_var.set("")
+        self.search_entry.delete(0, tk.END)
+        self.apply_filters()  # Refresh display after clearing
+    
+    def on_filter_changed(self, choice):
+        """Handle filter dropdown selection change."""
+        self.filter_character_var.set(choice)
+        self.log_debug(f"[CharactersTab] Filter changed to: '{choice}'")
+        self.apply_filters()
+    
+    def apply_filters(self):
+        """Apply both search and character filter to the displayed lines."""
+        search_text = self.search_var.get()
+        filter_char = self.filter_character_var.get()
+        self.log_debug(f"[CharactersTab] Applying filters - Search: '{search_text}', Character: '{filter_char}'")
+        self.show_lines()
+    
+    def update_filter_dropdown(self):
+        """Update the character filter dropdown with current characters."""
+        chars = self.get_characters()
+        filter_values = ["All Characters"] + chars
+        self.filter_dropdown.configure(values=filter_values)
+        self.log_debug(f"[CharactersTab] Updated filter dropdown with {len(chars)} characters")
 
     # ---------- Detection ----------
     def detect_characters(self):
@@ -791,8 +862,52 @@ class CharactersTab(ctk.CTkFrame):
             self.placeholder_label.pack(pady=20)
             return
 
+        # Apply filters
+        search_text = self.search_var.get().lower().strip()
+        filter_character = self.filter_character_var.get()
+        
+        self.log_debug(f"[CharactersTab] show_lines: Total lines={len(all_results)}, Search='{search_text}', Filter='{filter_character}'")
+        
+        filtered_results = []
+        for result in all_results:
+            speaker = result.get("speaker", "Unknown")
+            text = result.get("text", "").strip()
+            
+            # Apply character filter
+            if filter_character != "All Characters" and speaker != filter_character:
+                continue
+            
+            # Apply search filter
+            if search_text and search_text not in text.lower():
+                continue
+            
+            filtered_results.append(result)
+        
+        self.log_debug(f"[CharactersTab] show_lines: Filtered down to {len(filtered_results)} lines")
+        
+        # Show message if no results after filtering
+        if not filtered_results:
+            no_results_msg = "No lines found"
+            if search_text and filter_character != "All Characters":
+                no_results_msg = f"No lines found for '{filter_character}' matching '{search_text}'"
+            elif search_text:
+                no_results_msg = f"No lines found matching '{search_text}'"
+            elif filter_character != "All Characters":
+                no_results_msg = f"No lines found for '{filter_character}'"
+            
+            no_results_label = tk.Label(
+                self.scroll_frame,
+                text=no_results_msg,
+                fg="gray",
+                font=("Arial", 12),
+                wraplength=700,
+                justify="center",
+            )
+            no_results_label.pack(pady=20)
+            return
+
         self.line_vars = []
-        for idx, result in enumerate(all_results):
+        for idx, result in enumerate(filtered_results):
             # Add visual distinction for quote vs non-quote rows
             is_quote = result.get("is_quote", False)
             bg_color = "#ffffff" if is_quote else "#f0f0f0"  # white for quotes, light gray for narrator
@@ -811,20 +926,68 @@ class CharactersTab(ctk.CTkFrame):
             spk_label.pack(side="left", padx=5)
 
             text = result.get("text", "").strip()
-            preview = text[:100] + "..." if len(text) > 100 else text
+            
+            # Show full text if searching (don't truncate), otherwise show preview
+            if search_text:
+                display_text = text  # Show full text when searching
+            else:
+                display_text = text[:100] + "..." if len(text) > 100 else text
             
             # Calculate dynamic wraplength based on canvas width (subtract space for checkbox + speaker label + padding)
             canvas_width = self.canvas.winfo_width() if self.canvas.winfo_width() > 1 else 800
             dynamic_wraplength = max(400, canvas_width - 250)  # Reserve 250px for checkbox and speaker label
             
-            txt_label = tk.Label(frame, text=preview, wraplength=dynamic_wraplength, anchor="w", justify="left", bg=bg_color, font=("Arial", 11), fg="#000000")
-            txt_label.pack(side="left", fill="x", expand=True)
-            
-            # Store reference for dynamic resizing
-            self._text_labels.append(txt_label)
-
-            # Tooltip if truncated
-            if len(text) > 100:
+            # Use Text widget if highlighting is needed, otherwise use Label
+            if search_text:
+                # Create a read-only Text widget for highlighting
+                txt_widget = tk.Text(
+                    frame, 
+                    wrap="word",
+                    width=1,  # Will be controlled by pack
+                    bg=bg_color, 
+                    font=("Arial", 11), 
+                    fg="#000000",
+                    relief="flat",
+                    borderwidth=0,
+                    highlightthickness=0,
+                    cursor="arrow",
+                    padx=2,
+                    pady=2
+                )
+                txt_widget.insert("1.0", display_text)
+                
+                # Configure tag for highlighting
+                txt_widget.tag_configure("highlight", background="#FFFF00", foreground="#000000")
+                
+                # Find and highlight all occurrences of search text (case-insensitive)
+                txt_widget.configure(state="normal")
+                start_idx = "1.0"
+                while True:
+                    start_idx = txt_widget.search(search_text, start_idx, nocase=True, stopindex="end")
+                    if not start_idx:
+                        break
+                    end_idx = f"{start_idx}+{len(search_text)}c"
+                    txt_widget.tag_add("highlight", start_idx, end_idx)
+                    start_idx = end_idx
+                
+                txt_widget.configure(state="disabled")  # Make read-only
+                
+                # Calculate height based on content
+                num_lines = int(txt_widget.index('end-1c').split('.')[0])
+                txt_widget.configure(height=min(num_lines, 10))  # Max 10 lines visible
+                
+                txt_widget.pack(side="left", fill="both", expand=True, padx=2, pady=2)
+                self._text_labels.append(txt_widget)
+                
+                # Tooltip
+                ToolTip(txt_widget, text)
+            else:
+                # Use regular Label when not searching
+                txt_label = tk.Label(frame, text=display_text, wraplength=dynamic_wraplength, anchor="w", justify="left", bg=bg_color, font=("Arial", 11), fg="#000000")
+                txt_label.pack(side="left", fill="x", expand=True)
+                self._text_labels.append(txt_label)
+                
+                # Tooltip - always show full text in tooltip
                 ToolTip(txt_label, text)
 
         self.canvas.update_idletasks()
@@ -847,6 +1010,9 @@ class CharactersTab(ctk.CTkFrame):
             color = self._get_color(spk)
             self.char_list.insert(tk.END, spk)
             self.char_list.itemconfig(tk.END, fg=color)
+        
+        # Update filter dropdown
+        self.update_filter_dropdown()
 
     def _get_color(self, name):
         if name == "Narrator":
