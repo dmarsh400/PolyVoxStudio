@@ -1314,27 +1314,27 @@ class CharactersTab(ctk.CTkFrame):
             
             line_font_size = int(self.line_text_size_var.get())
             
-            # Use Text widget if highlighting is needed, otherwise use Label
+            # Always use Text widget for character name coloring
+            txt_widget = tk.Text(
+                frame, 
+                wrap="word",
+                width=1,  # Will be controlled by pack
+                bg=row_bg_color, 
+                font=("Arial", line_font_size), 
+                fg=fg_color,
+                relief="flat",
+                borderwidth=0,
+                highlightthickness=0,
+                cursor="arrow",
+                padx=2,
+                pady=2
+            )
+            
+            # Apply character name coloring
+            self._color_character_names_in_text(txt_widget, display_text, line_font_size)
+            
+            # Apply search highlighting if searching
             if search_text:
-                # Create a read-only Text widget for highlighting
-                txt_widget = tk.Text(
-                    frame, 
-                    wrap="word",
-                    width=1,  # Will be controlled by pack
-                    bg=row_bg_color, 
-                    font=("Arial", line_font_size), 
-                    fg=fg_color,
-                    relief="flat",
-                    borderwidth=0,
-                    highlightthickness=0,
-                    cursor="arrow",
-                    padx=2,
-                    pady=2
-                )
-                
-                # Apply character name coloring first
-                self._color_character_names_in_text(txt_widget, display_text, line_font_size)
-                
                 # Configure tag for search highlighting (different from character coloring)
                 txt_widget.tag_configure("search_highlight", background="#FFFF00", foreground="#000000")
                 
@@ -1350,24 +1350,16 @@ class CharactersTab(ctk.CTkFrame):
                     start_idx = end_idx
                 
                 txt_widget.configure(state="disabled")  # Make read-only
-                
-                # Calculate height based on content
-                num_lines = int(txt_widget.index('end-1c').split('.')[0])
-                txt_widget.configure(height=min(num_lines, 10))  # Max 10 lines visible
-                
-                txt_widget.pack(side="left", fill="both", expand=True, padx=2, pady=2)
-                self._text_labels.append(txt_widget)
-                
-                # Tooltip
-                ToolTip(txt_widget, text, characters_tab=self)
-            else:
-                # Use regular Label when not searching
-                txt_label = tk.Label(frame, text=display_text, wraplength=dynamic_wraplength, anchor="w", justify="left", bg=row_bg_color, font=("Arial", line_font_size), fg=fg_color)
-                txt_label.pack(side="left", fill="x", expand=True)
-                self._text_labels.append(txt_label)
-                
-                # Tooltip - always show full text in tooltip
-                ToolTip(txt_label, text, characters_tab=self)
+            
+            # Calculate height based on content
+            num_lines = int(txt_widget.index('end-1c').split('.')[0])
+            txt_widget.configure(height=min(num_lines, 10))  # Max 10 lines visible
+            
+            txt_widget.pack(side="left", fill="both", expand=True, padx=2, pady=2)
+            self._text_labels.append(txt_widget)
+            
+            # Tooltip - always show full text in tooltip
+            ToolTip(txt_widget, text, characters_tab=self)
 
         self.canvas.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -1398,17 +1390,120 @@ class CharactersTab(ctk.CTkFrame):
             return self.narrator_color
         if name not in self.character_colors:
             is_dark = ctk.get_appearance_mode() == "Dark"
-            if is_dark:
-                # Generate lighter colors for dark mode (avoiding very dark colors)
-                r = random.randint(100, 255)
-                g = random.randint(100, 255)
-                b = random.randint(100, 255)
+            
+            # Predefined set of highly saturated, distinct colors for maximum vibrancy
+            # These are carefully chosen to be bright, saturated, and easily distinguishable
+            vibrant_colors = [
+                # Primary bright colors - maximum brightness for dark mode
+                "#FF4444",  # Bright Red
+                "#44FF44",  # Bright Green  
+                "#4444FF",  # Bright Blue
+                "#FFFF44",  # Bright Yellow
+                "#FF44FF",  # Bright Magenta
+                "#44FFFF",  # Bright Cyan
+                "#FF8844",  # Bright Orange
+                "#8844FF",  # Bright Purple
+                "#44FF88",  # Bright Spring Green
+                "#FF4488",  # Bright Pink
+                "#88FF44",  # Bright Lime
+                "#4488FF",  # Bright Sky Blue
+                "#FF6666",  # Bright Coral
+                "#66FF66",  # Bright Electric Green
+                "#6666FF",  # Bright Royal Blue
+                "#FFFF66",  # Bright Lemon
+                "#FF66FF",  # Bright Hot Pink
+                "#66FFFF",  # Bright Aqua
+                "#FFA066",  # Bright Tangerine
+                "#A066FF",  # Bright Violet
+                "#66FFA0",  # Bright Mint
+                "#FF6688",  # Bright Rose
+                "#88FFA0",  # Bright Sea Green
+                "#A088FF",  # Bright Lavender
+                "#FFA088",  # Bright Peach
+                "#88A0FF",  # Bright Periwinkle
+                "#A0FFA0",  # Bright Light Green
+                "#FFA0A0",  # Bright Light Coral
+                "#A0A0FF",  # Bright Light Blue
+                "#FFFFA0",  # Bright Light Yellow
+                "#FFA0FF",  # Bright Light Magenta
+            ]
+            
+            # Get current character count to determine color assignment
+            current_chars = len([n for n in self.character_colors.keys() if n != "Narrator"])
+            
+            if current_chars < len(vibrant_colors):
+                # Use predefined vibrant color
+                color = vibrant_colors[current_chars]
             else:
-                # Generate darker colors for light mode (avoiding very light colors)
-                r = random.randint(0, 180)
-                g = random.randint(0, 180)
-                b = random.randint(0, 180)
-            self.character_colors[name] = "#%02x%02x%02x" % (r, g, b)
+                # Fallback to generating new vibrant colors if we have more characters than predefined colors
+                if is_dark:
+                    # Generate very bright, saturated colors for dark mode
+                    # Use HSV-like approach: high saturation, high value
+                    hue = (current_chars * 137.5) % 360  # Golden angle for good distribution
+                    
+                    # Convert HSV to RGB with high saturation and brightness
+                    h = hue / 360.0
+                    s = 0.9  # High saturation
+                    v = 0.95  # High brightness
+                    
+                    # HSV to RGB conversion
+                    c = v * s
+                    x = c * (1 - abs((h * 6) % 2 - 1))
+                    m = v - c
+                    
+                    if 0 <= h < 1/6:
+                        r, g, b = c, x, 0
+                    elif 1/6 <= h < 2/6:
+                        r, g, b = x, c, 0
+                    elif 2/6 <= h < 3/6:
+                        r, g, b = 0, c, x
+                    elif 3/6 <= h < 4/6:
+                        r, g, b = 0, x, c
+                    elif 4/6 <= h < 5/6:
+                        r, g, b = x, 0, c
+                    else:
+                        r, g, b = c, 0, x
+                    
+                    r = int((r + m) * 255)
+                    g = int((g + m) * 255)
+                    b = int((b + m) * 255)
+                    
+                    # Boost brightness even more for maximum pop in dark mode
+                    r = min(255, r + 20)
+                    g = min(255, g + 20)  
+                    b = min(255, b + 20)
+                else:
+                    # For light mode, use darker but still saturated colors
+                    hue = (current_chars * 137.5) % 360
+                    
+                    h = hue / 360.0
+                    s = 0.8  # High saturation
+                    v = 0.6  # Medium brightness for light mode
+                    
+                    c = v * s
+                    x = c * (1 - abs((h * 6) % 2 - 1))
+                    m = v - c
+                    
+                    if 0 <= h < 1/6:
+                        r, g, b = c, x, 0
+                    elif 1/6 <= h < 2/6:
+                        r, g, b = x, c, 0
+                    elif 2/6 <= h < 3/6:
+                        r, g, b = 0, c, x
+                    elif 3/6 <= h < 4/6:
+                        r, g, b = 0, x, c
+                    elif 4/6 <= h < 5/6:
+                        r, g, b = x, 0, c
+                    else:
+                        r, g, b = c, 0, x
+                    
+                    r = int((r + m) * 255)
+                    g = int((g + m) * 255)
+                    b = int((b + m) * 255)
+                
+                color = "#%02x%02x%02x" % (r, g, b)
+            
+            self.character_colors[name] = color
         return self.character_colors[name]
 
     # ---------- Public API for VoicesTab ----------
