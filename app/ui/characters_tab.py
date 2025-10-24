@@ -312,7 +312,9 @@ class CharactersTab(ctk.CTkFrame):
     def _color_character_names_in_text(self, text_widget, text):
         """Apply character name coloring to a Text widget, including partial name matches."""
         # Get all character names and their colors
-        characters = self.get_current_characters()
+        characters = list(self.character_colors.keys())
+        if "Narrator" not in characters:
+            characters.append("Narrator")
         character_colors = {}
         
         for char in characters:
@@ -353,27 +355,10 @@ class CharactersTab(ctk.CTkFrame):
                 
                 end_idx = f"{start_idx}+{len(name_part)}c"
                 
-                # Check if this range overlaps with any already colored range
-                start_line, start_char = map(int, start_idx.split('.'))
-                end_line, end_char = map(int, end_idx.split('.'))
-                
-                overlap = False
-                for applied_start, applied_end in applied_ranges:
-                    app_start_line, app_start_char = map(int, applied_start.split('.'))
-                    app_end_line, app_end_char = map(int, applied_end.split('.'))
-                    
-                    # Check for overlap
-                    if (start_line == app_start_line and 
-                        not (end_char <= app_start_char or start_char >= app_end_char)):
-                        overlap = True
-                        break
-                
-                if not overlap:
-                    # Apply color tag
-                    tag_name = f"char_{name_part.replace(' ', '_')}_{color}"
-                    text_widget.tag_configure(tag_name, foreground=color, font=("Arial", 11, "bold"))
-                    text_widget.tag_add(tag_name, start_idx, end_idx)
-                    applied_ranges.append((start_idx, end_idx))
+                # Apply color tag (simplified - no overlap prevention for now)
+                tag_name = f"char_{name_part.replace(' ', '_')}_{color}"
+                text_widget.tag_configure(tag_name, foreground=color, font=("Arial", 11, "bold"))
+                text_widget.tag_add(tag_name, start_idx, end_idx)
                 
                 start_idx = end_idx
 
