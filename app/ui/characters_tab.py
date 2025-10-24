@@ -3,6 +3,7 @@ from tkinter import messagebox, simpledialog, ttk
 import customtkinter as ctk
 import random
 import os
+import json
 
 from app.core import character_detection
 
@@ -11,9 +12,10 @@ from app.core import character_detection
 # Tooltip helper
 # -----------------------------
 class ToolTip:
-    def __init__(self, widget, text):
+    def __init__(self, widget, text, characters_tab=None):
         self.widget = widget
         self.text = text
+        self.characters_tab = characters_tab  # Reference to parent tab for character coloring
         self.tip_window = None
         widget.bind("<Enter>", self.show_tip)
         widget.bind("<Leave>", self.hide_tip)
@@ -26,12 +28,70 @@ class ToolTip:
         self.tip_window = tw = tk.Toplevel(self.widget)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
-        label = tk.Label(
-            tw, text=self.text, justify="left",
-            background="#ffffe0", relief="solid", borderwidth=1,
-            wraplength=600
+        
+        # Get theme colors
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        if is_dark:
+            bg_color = "#2b2b2b"
+            fg_color = "#ffffff"
+            border_color = "#555555"
+        else:
+            bg_color = "#ffffe0"
+            fg_color = "#000000"
+            border_color = "#000000"
+        
+        # Create text widget for rich formatting (supports colored text)
+        text_widget = tk.Text(
+            tw,
+            wrap="word",
+            font=("Arial", 12),  # Larger font
+            bg=bg_color,
+            fg=fg_color,
+            relief="solid",
+            borderwidth=2,
+            padx=8,
+            pady=6,
+            width=60,
+            height=8
         )
-        label.pack(ipadx=1)
+        
+        # Apply character name coloring to the tooltip text
+        if self.characters_tab:
+            self.characters_tab._color_character_names_in_text(text_widget, self.text)
+        else:
+            text_widget.insert("1.0", self.text)
+        
+        text_widget.config(state="disabled")  # Make read-only
+        
+        text_widget.pack(ipadx=1)
+        
+        # Adjust window size to fit content
+        text_widget.update_idletasks()
+        width = min(text_widget.winfo_reqwidth() + 20, 600)  # Max width 600px
+        height = min(text_widget.winfo_reqheight() + 20, 400)  # Max height 400px
+        tw.wm_geometry(f"{width}x{height}")
+
+    def _format_text_with_character_colors(self, text):
+        """Format text with character names colored according to their assigned colors."""
+        if not self.characters_tab or not text:
+            return text
+        
+        # Get all character names and their colors
+        characters = self.characters_tab.get_current_characters()
+        character_colors = {}
+        
+        for char in characters:
+            if char in self.characters_tab.character_colors:
+                character_colors[char] = self.characters_tab.character_colors[char]
+            elif char == "Narrator":
+                character_colors[char] = self.characters_tab.narrator_color
+        
+        # Sort by length (longest first) to avoid partial matches
+        sorted_chars = sorted(character_colors.keys(), key=len, reverse=True)
+        
+        # For tooltips, we'll return the text as-is since the Text widget will handle coloring
+        # The coloring will be applied when the tooltip Text widget is created
+        return text
 
     def hide_tip(self, event=None):
         if self.tip_window:
@@ -123,6 +183,10 @@ class CharactersTab(ctk.CTkFrame):
         ctk.CTkButton(char_frame, text="Merge Selected", command=self.merge_selected).pack(pady=5)
         ctk.CTkButton(char_frame, text="Rename Character", command=self.rename_character).pack(pady=5)
 
+        # Save/Load assignments
+        ctk.CTkButton(char_frame, text="Save Assignments", command=self.save_assignments).pack(pady=5)
+        ctk.CTkButton(char_frame, text="Load Assignments", command=self.load_assignments).pack(pady=5)
+
         # Line-centric operations
         line_frame = ctk.CTkFrame(left, border_width=2, border_color="gray")
         line_frame.pack(pady=10, padx=5, fill="x")
@@ -196,6 +260,122 @@ class CharactersTab(ctk.CTkFrame):
             justify="center",
         )
         self.placeholder_label.pack(pady=20)
+
+        # Apply theme colors
+        self._apply_theme_colors()
+
+    def _apply_theme_colors(self):
+        """Apply appropriate colors based on current theme."""
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        
+        if is_dark:
+            # Dark theme colors
+            bg_color = "#2b2b2b"
+            fg_color = "#ffffff"
+            select_bg = "#404040"
+            select_fg = "#ffffff"
+        else:
+            # Light theme colors
+            bg_color = "#ffffff"
+            fg_color = "#000000"
+            select_bg = "#0078d4"
+            select_fg = "#ffffff"
+        
+        # Apply to character listbox
+        if self.char_list:
+            self.char_list.config(
+                bg=bg_color,
+                fg=fg_color,
+                selectbackground=select_bg,
+                selectforeground=select_fg
+            )
+        
+        # Apply to placeholder label
+        if self.placeholder_label:
+            self.placeholder_label.config(bg=bg_color, fg=fg_color)
+        
+        # Apply to scroll frame background
+        if self.scroll_frame:
+            self.scroll_frame.config(bg=bg_color)
+        
+        # Regenerate character colors for new theme
+        old_colors = self.character_colors.copy()
+        self.character_colors.clear()
+        # Reassign colors to existing characters
+        for name in old_colors:
+            if name != "Narrator":  # Skip narrator, it has fixed color
+                self._get_color(name)
+        
+        # Refresh the character list display
+        self._refresh_char_list()
+
+    def _color_character_names_in_text(self, text_widget, text):
+        """Apply character name coloring to a Text widget, including partial name matches."""
+        # Get all character names and their colors
+        characters = self.get_current_characters()
+        character_colors = {}
+        
+        for char in characters:
+            if char in self.character_colors:
+                character_colors[char] = self.character_colors[char]
+            elif char == "Narrator":
+                character_colors[char] = self.narrator_color
+        
+        # Insert the text
+        text_widget.insert("1.0", text)
+        
+        # Create a list of all name parts to match, with their associated character and color
+        name_parts = []
+        for char_name, color in character_colors.items():
+            if char_name == "Narrator":
+                # Special handling for Narrator - only match exact
+                name_parts.append((char_name, color, len(char_name)))
+            else:
+                # Split character name into parts (first, last, etc.)
+                parts = char_name.split()
+                for part in parts:
+                    if len(part) > 1:  # Only match parts longer than 1 character
+                        name_parts.append((part, color, len(part)))
+        
+        # Sort by length (longest first) to avoid partial matches overriding longer matches
+        name_parts.sort(key=lambda x: x[2], reverse=True)
+        
+        # Apply coloring to character name parts
+        applied_ranges = []  # Track ranges that have been colored to avoid overlaps
+        
+        for name_part, color, length in name_parts:
+            start_idx = "1.0"
+            while True:
+                # Find the name part
+                start_idx = text_widget.search(name_part, start_idx, nocase=False, stopindex="end")
+                if not start_idx:
+                    break
+                
+                end_idx = f"{start_idx}+{len(name_part)}c"
+                
+                # Check if this range overlaps with any already colored range
+                start_line, start_char = map(int, start_idx.split('.'))
+                end_line, end_char = map(int, end_idx.split('.'))
+                
+                overlap = False
+                for applied_start, applied_end in applied_ranges:
+                    app_start_line, app_start_char = map(int, applied_start.split('.'))
+                    app_end_line, app_end_char = map(int, applied_end.split('.'))
+                    
+                    # Check for overlap
+                    if (start_line == app_start_line and 
+                        not (end_char <= app_start_char or start_char >= app_end_char)):
+                        overlap = True
+                        break
+                
+                if not overlap:
+                    # Apply color tag
+                    tag_name = f"char_{name_part.replace(' ', '_')}_{color}"
+                    text_widget.tag_configure(tag_name, foreground=color, font=("Arial", 11, "bold"))
+                    text_widget.tag_add(tag_name, start_idx, end_idx)
+                    applied_ranges.append((start_idx, end_idx))
+                
+                start_idx = end_idx
 
     # ---------- Window Resize Handler ----------
     def _on_window_resize(self, event):
@@ -357,6 +537,61 @@ class CharactersTab(ctk.CTkFrame):
         
         self.log_debug(f"[CharactersTab] Renamed '{old_name}' to '{new_name}' ({updated_count} lines updated)")
         messagebox.showinfo("Success", f"Renamed '{old_name}' to '{new_name}'\n{updated_count} lines updated.")
+
+    def save_assignments(self):
+        """Save character assignments to a JSON file."""
+        if not self.chapters:
+            messagebox.showwarning("Warning", "No chapters with assignments to save.")
+            return
+        
+        from tkinter import filedialog
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Save Character Assignments"
+        )
+        if not file_path:
+            return
+        
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.chapters, f, indent=2, ensure_ascii=False)
+            messagebox.showinfo("Success", f"Assignments saved to {file_path}")
+            self.log_debug(f"[CharactersTab] Saved assignments to {file_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save assignments: {e}")
+            self.log_debug(f"[CharactersTab] Failed to save assignments: {e}")
+
+    def load_assignments(self):
+        """Load character assignments from a JSON file."""
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Load Character Assignments"
+        )
+        if not file_path:
+            return
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                loaded_chapters = json.load(f)
+            
+            # Validate structure
+            if not isinstance(loaded_chapters, list):
+                raise ValueError("Invalid file format")
+            
+            for chapter in loaded_chapters:
+                if not isinstance(chapter, dict) or "title" not in chapter or "text" not in chapter:
+                    raise ValueError("Invalid chapter structure")
+            
+            self.chapters = loaded_chapters
+            self._refresh_char_list()
+            self.show_lines()
+            messagebox.showinfo("Success", f"Assignments loaded from {file_path}")
+            self.log_debug(f"[CharactersTab] Loaded assignments from {file_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load assignments: {e}")
+            self.log_debug(f"[CharactersTab] Failed to load assignments: {e}")
 
     def _prompt_survivor_dropdown(self, names):
         win = tk.Toplevel(self)
@@ -890,6 +1125,19 @@ class CharactersTab(ctk.CTkFrame):
             self.placeholder_label.pack(pady=20)
             return
 
+        # Get theme colors
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        if is_dark:
+            bg_color = "#2b2b2b"
+            fg_color = "#ffffff"
+            select_bg = "#404040"
+            select_fg = "#ffffff"
+        else:
+            bg_color = "#ffffff"
+            fg_color = "#000000"
+            select_bg = "#0078d4"
+            select_fg = "#ffffff"
+
         # Apply filters
         search_text = self.search_var.get().lower().strip()
         filter_character = self.filter_character_var.get()
@@ -930,6 +1178,7 @@ class CharactersTab(ctk.CTkFrame):
                 font=("Arial", 12),
                 wraplength=700,
                 justify="center",
+                bg=bg_color
             )
             no_results_label.pack(pady=20)
             return
@@ -938,19 +1187,21 @@ class CharactersTab(ctk.CTkFrame):
         for idx, result in enumerate(filtered_results):
             # Add visual distinction for quote vs non-quote rows
             is_quote = result.get("is_quote", False)
-            bg_color = "#ffffff" if is_quote else "#f0f0f0"  # white for quotes, light gray for narrator
+            row_bg_color = "#ffffff" if is_quote else "#f0f0f0"  # white for quotes, light gray for narrator
+            if is_dark:
+                row_bg_color = "#3a3a3a" if is_quote else "#2b2b2b"  # darker for dark theme
             
-            frame = tk.Frame(self.scroll_frame, bg=bg_color, relief="solid", borderwidth=1)
+            frame = tk.Frame(self.scroll_frame, bg=row_bg_color, relief="solid", borderwidth=1)
             frame.pack(fill="x", pady=1)
 
             var = tk.IntVar(master=frame, value=0)
-            chk = tk.Checkbutton(frame, variable=var, bg=bg_color)
+            chk = tk.Checkbutton(frame, variable=var, bg=row_bg_color)
             chk.pack(side="left", padx=5)
             self.line_vars.append((var, result))
 
             speaker = result.get("speaker", "Unknown")
             color = self._get_color(speaker)
-            spk_label = tk.Label(frame, text=speaker, fg=color, width=15, anchor="w", bg=bg_color, font=("Arial", 11))
+            spk_label = tk.Label(frame, text=speaker, fg=color, width=15, anchor="w", bg=row_bg_color, font=("Arial", 11))
             spk_label.pack(side="left", padx=5)
 
             text = result.get("text", "").strip()
@@ -972,9 +1223,9 @@ class CharactersTab(ctk.CTkFrame):
                     frame, 
                     wrap="word",
                     width=1,  # Will be controlled by pack
-                    bg=bg_color, 
+                    bg=row_bg_color, 
                     font=("Arial", 11), 
-                    fg="#000000",
+                    fg=fg_color,
                     relief="flat",
                     borderwidth=0,
                     highlightthickness=0,
@@ -982,10 +1233,12 @@ class CharactersTab(ctk.CTkFrame):
                     padx=2,
                     pady=2
                 )
-                txt_widget.insert("1.0", display_text)
                 
-                # Configure tag for highlighting
-                txt_widget.tag_configure("highlight", background="#FFFF00", foreground="#000000")
+                # Apply character name coloring first
+                self._color_character_names_in_text(txt_widget, display_text)
+                
+                # Configure tag for search highlighting (different from character coloring)
+                txt_widget.tag_configure("search_highlight", background="#FFFF00", foreground="#000000")
                 
                 # Find and highlight all occurrences of search text (case-insensitive)
                 txt_widget.configure(state="normal")
@@ -995,7 +1248,7 @@ class CharactersTab(ctk.CTkFrame):
                     if not start_idx:
                         break
                     end_idx = f"{start_idx}+{len(search_text)}c"
-                    txt_widget.tag_add("highlight", start_idx, end_idx)
+                    txt_widget.tag_add("search_highlight", start_idx, end_idx)
                     start_idx = end_idx
                 
                 txt_widget.configure(state="disabled")  # Make read-only
@@ -1008,15 +1261,15 @@ class CharactersTab(ctk.CTkFrame):
                 self._text_labels.append(txt_widget)
                 
                 # Tooltip
-                ToolTip(txt_widget, text)
+                ToolTip(txt_widget, text, characters_tab=self)
             else:
                 # Use regular Label when not searching
-                txt_label = tk.Label(frame, text=display_text, wraplength=dynamic_wraplength, anchor="w", justify="left", bg=bg_color, font=("Arial", 11), fg="#000000")
+                txt_label = tk.Label(frame, text=display_text, wraplength=dynamic_wraplength, anchor="w", justify="left", bg=row_bg_color, font=("Arial", 11), fg=fg_color)
                 txt_label.pack(side="left", fill="x", expand=True)
                 self._text_labels.append(txt_label)
                 
                 # Tooltip - always show full text in tooltip
-                ToolTip(txt_label, text)
+                ToolTip(txt_label, text, characters_tab=self)
 
         self.canvas.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -1046,10 +1299,17 @@ class CharactersTab(ctk.CTkFrame):
         if name == "Narrator":
             return self.narrator_color
         if name not in self.character_colors:
-            # Generate darker colors only (each RGB component 0-180, avoiding light colors)
-            r = random.randint(0, 180)
-            g = random.randint(0, 180)
-            b = random.randint(0, 180)
+            is_dark = ctk.get_appearance_mode() == "Dark"
+            if is_dark:
+                # Generate lighter colors for dark mode (avoiding very dark colors)
+                r = random.randint(100, 255)
+                g = random.randint(100, 255)
+                b = random.randint(100, 255)
+            else:
+                # Generate darker colors for light mode (avoiding very light colors)
+                r = random.randint(0, 180)
+                g = random.randint(0, 180)
+                b = random.randint(0, 180)
             self.character_colors[name] = "#%02x%02x%02x" % (r, g, b)
         return self.character_colors[name]
 
