@@ -17,8 +17,9 @@ class ToolTip:
         self.text = text
         self.characters_tab = characters_tab  # Reference to parent tab for character coloring
         self.tip_window = None
+        self.mouse_over_tooltip = False  # Track if mouse is over tooltip
         widget.bind("<Enter>", self.show_tip)
-        widget.bind("<Leave>", self.hide_tip)
+        widget.bind("<Leave>", self._on_widget_leave)
 
     def show_tip(self, event=None):
         if self.tip_window or not self.text:
@@ -40,36 +41,62 @@ class ToolTip:
             fg_color = "#000000"
             border_color = "#000000"
         
+        # Get tooltip font size from characters tab
+        tooltip_font_size = 12  # default
+        if self.characters_tab:
+            tooltip_font_size = int(self.characters_tab.tooltip_text_size_var.get())
+        
+        # Create frame to hold text widget and scrollbar
+        main_frame = tk.Frame(tw, bg=bg_color, relief="solid", borderwidth=2)
+        main_frame.pack(fill="both", expand=True)
+        
+        # Create scrollbar
+        scrollbar = tk.Scrollbar(main_frame, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+        
         # Create text widget for rich formatting (supports colored text)
         text_widget = tk.Text(
-            tw,
+            main_frame,
             wrap="word",
-            font=("Arial", 12),  # Larger font
+            font=("Arial", tooltip_font_size),  # Use dynamic font size
             bg=bg_color,
             fg=fg_color,
-            relief="solid",
-            borderwidth=2,
+            relief="flat",
+            borderwidth=0,
             padx=8,
             pady=6,
             width=60,
-            height=8
+            height=8,
+            yscrollcommand=scrollbar.set
         )
+        
+        # Configure scrollbar
+        scrollbar.config(command=text_widget.yview)
+        
+        text_widget.pack(side="left", fill="both", expand=True)
         
         # Apply character name coloring to the tooltip text
         if self.characters_tab:
-            self.characters_tab._color_character_names_in_text(text_widget, self.text)
+            self.characters_tab._color_character_names_in_text(text_widget, self.text, tooltip_font_size)
         else:
             text_widget.insert("1.0", self.text)
         
         text_widget.config(state="disabled")  # Make read-only
         
-        text_widget.pack(ipadx=1)
-        
         # Adjust window size to fit content
         text_widget.update_idletasks()
-        width = min(text_widget.winfo_reqwidth() + 20, 600)  # Max width 600px
+        width = min(text_widget.winfo_reqwidth() + 30, 600)  # Max width 600px, extra space for scrollbar
         height = min(text_widget.winfo_reqheight() + 20, 400)  # Max height 400px
         tw.wm_geometry(f"{width}x{height}")
+        
+        # Bind mouse events to tooltip window to capture mouse when hovering over tooltip
+        tw.bind("<Enter>", self._on_tooltip_enter)
+        tw.bind("<Leave>", self._on_tooltip_leave)
+        
+        # Bind scroll events to prevent them from bubbling up to underlying widgets
+        tw.bind("<MouseWheel>", self._on_tooltip_scroll)
+        tw.bind("<Button-4>", self._on_tooltip_scroll)  # Linux scroll up
+        tw.bind("<Button-5>", self._on_tooltip_scroll)  # Linux scroll down
 
     def _format_text_with_character_colors(self, text):
         """Format text with character names colored according to their assigned colors."""
@@ -93,7 +120,46 @@ class ToolTip:
         # The coloring will be applied when the tooltip Text widget is created
         return text
 
+    def _on_tooltip_enter(self, event=None):
+        """Handle mouse entering tooltip window."""
+        self.mouse_over_tooltip = True
+    
+    def _on_tooltip_leave(self, event=None):
+        """Handle mouse leaving tooltip window."""
+        self.mouse_over_tooltip = False
+        # Check if we should hide the tooltip after a short delay
+        self.widget.after(100, self._check_hide_tooltip)
+    
+    def _on_tooltip_scroll(self, event):
+        """Handle scroll events on tooltip to prevent them from bubbling up."""
+        # Find the text widget and scrollbar in the tooltip
+        if self.tip_window:
+            # Find text widgets in the tooltip
+            for child in self.tip_window.winfo_children():
+                if isinstance(child, tk.Frame):  # main_frame
+                    for subchild in child.winfo_children():
+                        if isinstance(subchild, tk.Text):
+                            # Handle scroll event on the text widget
+                            if event.delta > 0 or event.num == 4:  # Scroll up
+                                subchild.yview_scroll(-1, "units")
+                            elif event.delta < 0 or event.num == 5:  # Scroll down
+                                subchild.yview_scroll(1, "units")
+                            return "break"  # Prevent event from bubbling up
+        return "break"  # Prevent event from bubbling up anyway
+
+    def _on_widget_leave(self, event=None):
+        """Handle mouse leaving the widget - delay hiding tooltip to allow mouse to move to tooltip."""
+        self.widget.after(100, self._check_hide_tooltip)
+    
+    def _check_hide_tooltip(self):
+        """Check if tooltip should be hidden after mouse leaves."""
+        if not self.mouse_over_tooltip and self.tip_window:
+            self.hide_tip()
+
     def hide_tip(self, event=None):
+        """Hide the tooltip, but only if mouse is not over the tooltip itself."""
+        if self.mouse_over_tooltip:
+            return  # Don't hide if mouse is over tooltip
         if self.tip_window:
             self.tip_window.destroy()
             self.tip_window = None
@@ -117,6 +183,10 @@ class CharactersTab(ctk.CTkFrame):
         # Search and filter state
         self.search_var = tk.StringVar()
         self.filter_character_var = tk.StringVar(value="All Characters")
+        
+        # Text size control
+        self.line_text_size_var = tk.StringVar(value="11")
+        self.tooltip_text_size_var = tk.StringVar(value="12")
         
         self.build_layout()
 
@@ -155,7 +225,7 @@ class CharactersTab(ctk.CTkFrame):
             width=30, 
             exportselection=False,
             yscrollcommand=char_scrollbar.set,
-            font=("Arial", 11)  # Slightly larger font
+            font=("Arial", int(self.line_text_size_var.get()))  # Use dynamic font size
         )
         char_scrollbar.config(command=self.char_list.yview)
         char_scrollbar.pack(side="right", fill="y")
@@ -231,6 +301,31 @@ class CharactersTab(ctk.CTkFrame):
             command=self.on_filter_changed
         )
         self.filter_dropdown.pack(side="left", padx=5, pady=5)
+
+        # Text size controls
+        line_size_label = ctk.CTkLabel(search_filter_frame, text="Line Size:", font=("Arial", 11))
+        line_size_label.pack(side="left", padx=(20, 5), pady=5)
+        
+        self.line_size_dropdown = ctk.CTkComboBox(
+            search_filter_frame,
+            variable=self.line_text_size_var,
+            values=["8", "9", "10", "11", "12", "14", "16", "18", "20"],
+            width=60,
+            command=self.on_line_size_changed
+        )
+        self.line_size_dropdown.pack(side="left", padx=2, pady=5)
+        
+        tooltip_size_label = ctk.CTkLabel(search_filter_frame, text="Tooltip Size:", font=("Arial", 11))
+        tooltip_size_label.pack(side="left", padx=(10, 5), pady=5)
+        
+        self.tooltip_size_dropdown = ctk.CTkComboBox(
+            search_filter_frame,
+            variable=self.tooltip_text_size_var,
+            values=["8", "9", "10", "11", "12", "14", "16", "18", "20"],
+            width=60,
+            command=self.on_tooltip_size_changed
+        )
+        self.tooltip_size_dropdown.pack(side="left", padx=2, pady=5)
 
         # Canvas and scrollbar
         self.canvas = tk.Canvas(right)
@@ -309,7 +404,7 @@ class CharactersTab(ctk.CTkFrame):
         # Refresh the character list display
         self._refresh_char_list()
 
-    def _color_character_names_in_text(self, text_widget, text):
+    def _color_character_names_in_text(self, text_widget, text, font_size=11):
         """Apply character name coloring to a Text widget, including partial name matches."""
         # Get all character names and their colors
         characters = list(self.character_colors.keys())
@@ -357,7 +452,7 @@ class CharactersTab(ctk.CTkFrame):
                 
                 # Apply color tag (simplified - no overlap prevention for now)
                 tag_name = f"char_{name_part.replace(' ', '_')}_{color}"
-                text_widget.tag_configure(tag_name, foreground=color, font=("Arial", 11, "bold"))
+                text_widget.tag_configure(tag_name, foreground=color, font=("Arial", font_size, "bold"))
                 text_widget.tag_add(tag_name, start_idx, end_idx)
                 
                 start_idx = end_idx
@@ -1044,6 +1139,21 @@ class CharactersTab(ctk.CTkFrame):
         self.log_debug(f"[CharactersTab] Filter changed to: '{choice}'")
         self.apply_filters()
     
+    def on_line_size_changed(self, choice):
+        """Handle line text size dropdown selection change."""
+        self.line_text_size_var.set(choice)
+        self.log_debug(f"[CharactersTab] Line text size changed to: '{choice}'")
+        # Update character list font
+        if self.char_list:
+            self.char_list.config(font=("Arial", int(choice)))
+        self.show_lines()  # Refresh display with new text size
+    
+    def on_tooltip_size_changed(self, choice):
+        """Handle tooltip text size dropdown selection change."""
+        self.tooltip_text_size_var.set(choice)
+        self.log_debug(f"[CharactersTab] Tooltip text size changed to: '{choice}'")
+        # Tooltips will use the new size on next hover
+    
     def apply_filters(self):
         """Apply both search and character filter to the displayed lines."""
         search_text = self.search_var.get()
@@ -1186,7 +1296,8 @@ class CharactersTab(ctk.CTkFrame):
 
             speaker = result.get("speaker", "Unknown")
             color = self._get_color(speaker)
-            spk_label = tk.Label(frame, text=speaker, fg=color, width=15, anchor="w", bg=row_bg_color, font=("Arial", 11))
+            line_font_size = int(self.line_text_size_var.get())
+            spk_label = tk.Label(frame, text=speaker, fg=color, width=15, anchor="w", bg=row_bg_color, font=("Arial", line_font_size))
             spk_label.pack(side="left", padx=5)
 
             text = result.get("text", "").strip()
@@ -1201,6 +1312,8 @@ class CharactersTab(ctk.CTkFrame):
             canvas_width = self.canvas.winfo_width() if self.canvas.winfo_width() > 1 else 800
             dynamic_wraplength = max(400, canvas_width - 250)  # Reserve 250px for checkbox and speaker label
             
+            line_font_size = int(self.line_text_size_var.get())
+            
             # Use Text widget if highlighting is needed, otherwise use Label
             if search_text:
                 # Create a read-only Text widget for highlighting
@@ -1209,7 +1322,7 @@ class CharactersTab(ctk.CTkFrame):
                     wrap="word",
                     width=1,  # Will be controlled by pack
                     bg=row_bg_color, 
-                    font=("Arial", 11), 
+                    font=("Arial", line_font_size), 
                     fg=fg_color,
                     relief="flat",
                     borderwidth=0,
@@ -1220,7 +1333,7 @@ class CharactersTab(ctk.CTkFrame):
                 )
                 
                 # Apply character name coloring first
-                self._color_character_names_in_text(txt_widget, display_text)
+                self._color_character_names_in_text(txt_widget, display_text, line_font_size)
                 
                 # Configure tag for search highlighting (different from character coloring)
                 txt_widget.tag_configure("search_highlight", background="#FFFF00", foreground="#000000")
@@ -1249,7 +1362,7 @@ class CharactersTab(ctk.CTkFrame):
                 ToolTip(txt_widget, text, characters_tab=self)
             else:
                 # Use regular Label when not searching
-                txt_label = tk.Label(frame, text=display_text, wraplength=dynamic_wraplength, anchor="w", justify="left", bg=row_bg_color, font=("Arial", 11), fg=fg_color)
+                txt_label = tk.Label(frame, text=display_text, wraplength=dynamic_wraplength, anchor="w", justify="left", bg=row_bg_color, font=("Arial", line_font_size), fg=fg_color)
                 txt_label.pack(side="left", fill="x", expand=True)
                 self._text_labels.append(txt_label)
                 
