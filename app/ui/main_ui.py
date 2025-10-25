@@ -155,6 +155,21 @@ class PolyVoxApp(ctk.CTk):
         ctk.set_appearance_mode(mode.lower())
         self.log_debug(f"[MainUI] Appearance mode set to {mode}")
 
+    def refresh_themes(self):
+        """Refresh theme colors on all tabs that support it."""
+        if self.book_processing_tab and hasattr(self.book_processing_tab, '_apply_theme_colors'):
+            self.book_processing_tab._apply_theme_colors()
+        if self.characters_tab and hasattr(self.characters_tab, '_apply_theme_colors'):
+            self.characters_tab._apply_theme_colors()
+            # Also refresh the lines display to apply new colors
+            self.characters_tab.show_lines()
+        if self.voices_tab and hasattr(self.voices_tab, '_apply_theme_colors'):
+            self.voices_tab._apply_theme_colors()
+        if self.debug_tab and hasattr(self.debug_tab, '_apply_theme_colors'):
+            self.debug_tab._apply_theme_colors()
+        if self.audio_processing_tab and hasattr(self.audio_processing_tab, '_apply_theme_colors'):
+            self.audio_processing_tab._apply_theme_colors()
+
     def on_closing(self):
         """Clean up and close the application properly."""
         try:

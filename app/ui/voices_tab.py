@@ -171,6 +171,50 @@ class VoicesTab(ctk.CTkFrame):
         
         # Initial population
         self._refresh_voice_list()
+        
+        # Apply theme colors
+        self._apply_theme_colors()
+
+    def _apply_theme_colors(self):
+        """Apply appropriate colors based on current theme."""
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        
+        if is_dark:
+            # Dark theme colors
+            bg_color = "#2b2b2b"
+            fg_color = "#ffffff"
+            tree_bg = "#2b2b2b"
+            tree_fg = "#ffffff"
+            tree_select_bg = "#404040"
+            tree_select_fg = "#ffffff"
+        else:
+            # Light theme colors
+            bg_color = "#ffffff"
+            fg_color = "#000000"
+            tree_bg = "#ffffff"
+            tree_fg = "#000000"
+            tree_select_bg = "#0078d4"
+            tree_select_fg = "#ffffff"
+        
+        # Configure Treeview style for theme
+        style = ttk.Style()
+        style.configure("Treeview",
+            background=tree_bg,
+            foreground=tree_fg,
+            fieldbackground=tree_bg
+        )
+        style.configure("Treeview.Heading",
+            background=tree_bg,
+            foreground=tree_fg
+        )
+        style.map("Treeview",
+            background=[("selected", tree_select_bg)],
+            foreground=[("selected", tree_select_fg)]
+        )
+        
+        # Apply to stats label
+        if self.stats_label:
+            self.stats_label.configure(text_color=fg_color)
 
     def refresh_characters(self):
         # Reload voices.json to ensure we have latest data

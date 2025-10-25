@@ -329,6 +329,52 @@ class AudioProcessingTab(ctk.CTkFrame):
         # Add alternating row colors for visual separation
         self.tree.tag_configure('oddrow', background='#f0f0f0')
         self.tree.tag_configure('evenrow', background='#ffffff')
+        
+        # Apply theme colors
+        self._apply_theme_colors()
+
+    def _apply_theme_colors(self):
+        """Apply appropriate colors based on current theme."""
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        
+        if is_dark:
+            # Dark theme colors
+            bg_color = "#2b2b2b"
+            fg_color = "#ffffff"
+            tree_bg = "#2b2b2b"
+            tree_fg = "#ffffff"
+            tree_select_bg = "#404040"
+            tree_select_fg = "#ffffff"
+            odd_bg = "#3a3a3a"
+            even_bg = "#2b2b2b"
+        else:
+            # Light theme colors
+            bg_color = "#ffffff"
+            fg_color = "#000000"
+            tree_bg = "#ffffff"
+            tree_fg = "#000000"
+            tree_select_bg = "#0078d4"
+            tree_select_fg = "#ffffff"
+            odd_bg = "#f0f0f0"
+            even_bg = "#ffffff"
+        
+        # Configure Treeview style for theme
+        style = ttk.Style()
+        style.configure("Queue.Treeview", 
+                       background=tree_bg,
+                       foreground=tree_fg,
+                       fieldbackground=tree_bg)
+        style.configure("Queue.Treeview.Heading", 
+                       background=tree_bg,
+                       foreground=tree_fg)
+        style.map("Queue.Treeview",
+                 background=[("selected", tree_select_bg)],
+                 foreground=[("selected", tree_select_fg)])
+        
+        # Update alternating row colors
+        if self.tree:
+            self.tree.tag_configure('oddrow', background=odd_bg)
+            self.tree.tag_configure('evenrow', background=even_bg)
 
     def stop_processing(self):
         """Stop processing (gracefully)"""
@@ -520,7 +566,7 @@ class AudioProcessingTab(ctk.CTkFrame):
                 for text, speaker, voice_entry, voice_label in zip(lines, speakers, voice_entries, voice_labels):
                     if len(text) > 250:
                         # Split long text into chunks (XTTS has 250 char limit for English)
-                        chunks = self._split_long_text(text, max_chars=250)
+                        chunks = self._split_long_text(text, max_chars=249)
                         self.log_debug(f"[AudioProcessingTab] Split long text ({len(text)} chars) into {len(chunks)} chunks")
                         # Add each chunk with the same speaker/voice
                         for chunk in chunks:
@@ -685,7 +731,7 @@ class AudioProcessingTab(ctk.CTkFrame):
         )
 
     # ---------------- Helpers ----------------
-    def _split_long_text(self, text: str, max_chars: int = 250) -> list:
+    def _split_long_text(self, text: str, max_chars: int = 200) -> list:
         """
         Split long text into chunks at sentence boundaries with expression awareness.
         Tries to keep chunks under max_chars while respecting sentence boundaries and
@@ -740,8 +786,8 @@ class AudioProcessingTab(ctk.CTkFrame):
         """
         import re
         
-        # Try splitting at natural pause points first: commas, semicolons, em-dashes, colons
-        pause_pattern = r'([,;:—])\s+'
+        # Try splitting at natural pause points first: commas, semicolons, em-dashes, colons, hyphens
+        pause_pattern = r'([,;:—\-–—])\s+'
         parts = re.split(pause_pattern, sentence)
         
         chunks = []

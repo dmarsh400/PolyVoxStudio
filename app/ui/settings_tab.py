@@ -15,7 +15,7 @@ class SettingsTab(ctk.CTkFrame):
         
         # Default settings
         self.settings = {
-            "theme": "System",
+            "theme": "Dark",
             "gpu_refresh": 2.0,
             "gpu_debug": True,
             "audio_output_dir": "output_audio",
@@ -33,6 +33,10 @@ class SettingsTab(ctk.CTkFrame):
         
         self.load_settings()
         self._build_layout()
+        
+        # Apply initial theme
+        initial_theme = self.settings.get("theme", "Dark")
+        self.change_theme(initial_theme)
 
     def _build_layout(self):
         # Title
@@ -232,6 +236,11 @@ class SettingsTab(ctk.CTkFrame):
         ctk.set_appearance_mode(choice)
         self.settings["theme"] = choice
         self.log_debug(f"[SettingsTab] Theme changed to {choice}")
+        # Refresh theme colors on tabs
+        try:
+            self.master.master.master.refresh_themes()
+        except AttributeError:
+            pass  # If refresh_themes not available, ignore
     
     def change_narrator_color(self):
         color = self.narrator_color_var.get()
@@ -336,7 +345,7 @@ class SettingsTab(ctk.CTkFrame):
         if response:
             # Reset to defaults
             self.settings = {
-                "theme": "System",
+                "theme": "Dark",
                 "gpu_refresh": 2.0,
                 "gpu_debug": True,
                 "audio_output_dir": "output_audio",

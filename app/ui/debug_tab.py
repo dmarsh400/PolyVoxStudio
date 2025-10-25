@@ -18,6 +18,32 @@ class DebugTab(ctk.CTkFrame):
 
         clear_btn = ctk.CTkButton(self, text="Clear", command=self.clear_log)
         clear_btn.pack(pady=5)
+        
+        # Apply theme colors
+        self._apply_theme_colors()
+
+    def _apply_theme_colors(self):
+        """Apply appropriate colors based on current theme."""
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        
+        if is_dark:
+            # Dark theme colors
+            bg_color = "#2b2b2b"
+            fg_color = "#ffffff"
+        else:
+            # Light theme colors
+            bg_color = "#ffffff"
+            fg_color = "#000000"
+        
+        # Apply to text area
+        if self.text_area:
+            self.text_area.config(
+                bg=bg_color,
+                fg=fg_color,
+                insertbackground=fg_color,  # cursor color
+                selectbackground="#404040" if is_dark else "#0078d4",
+                selectforeground="#ffffff"
+            )
 
     def log(self, message: str):
         """Primary logging method."""

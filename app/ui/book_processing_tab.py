@@ -23,8 +23,18 @@ class BookProcessingTab(ctk.CTkFrame):
         self._build_layout()
 
     def _build_layout(self):
+        # Store references to left and right panels for resize handling
+        self.left_panel = ctk.CTkFrame(self)
+        self.left_panel.pack(side="left", fill="both", padx=10, pady=10)
+
+        self.right_panel = ctk.CTkFrame(self)
+        self.right_panel.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+        
+        left = self.left_panel
+        right = self.right_panel
+
         # Top button row
-        button_frame = ctk.CTkFrame(self)
+        button_frame = ctk.CTkFrame(left)
         button_frame.pack(fill="x", padx=10, pady=10)
 
         import_button = ctk.CTkButton(button_frame, text="Import Book", command=self._import_book)
@@ -37,7 +47,7 @@ class BookProcessingTab(ctk.CTkFrame):
         send_button.pack(side="left", padx=5)
 
         # Middle split: chapters list + preview
-        middle_frame = ctk.CTkFrame(self)
+        middle_frame = ctk.CTkFrame(left)
         middle_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Left: chapter list
@@ -67,8 +77,47 @@ class BookProcessingTab(ctk.CTkFrame):
         self.chapter_preview.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Bottom status
-        self.status_label = ctk.CTkLabel(self, text="No book loaded")
+        self.status_label = ctk.CTkLabel(left, text="No book loaded")
         self.status_label.pack(fill="x", padx=10, pady=(0, 10))
+
+        # Apply theme colors
+        self._apply_theme_colors()
+
+    def _apply_theme_colors(self):
+        """Apply appropriate colors based on current theme."""
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        
+        if is_dark:
+            # Dark theme colors
+            bg_color = "#2b2b2b"
+            fg_color = "#ffffff"
+            select_bg = "#404040"
+            select_fg = "#ffffff"
+        else:
+            # Light theme colors
+            bg_color = "#ffffff"
+            fg_color = "#000000"
+            select_bg = "#0078d4"
+            select_fg = "#ffffff"
+        
+        # Apply to chapter listbox
+        if self.chapter_listbox:
+            self.chapter_listbox.config(
+                bg=bg_color,
+                fg=fg_color,
+                selectbackground=select_bg,
+                selectforeground=select_fg
+            )
+        
+        # Apply to chapter preview text widget
+        if self.chapter_preview:
+            self.chapter_preview.config(
+                bg=bg_color,
+                fg=fg_color,
+                insertbackground=fg_color,  # cursor color
+                selectbackground=select_bg,
+                selectforeground=select_fg
+            )
 
     # ---------- Actions ----------
     def _import_book(self):
@@ -179,13 +228,27 @@ class BookProcessingTab(ctk.CTkFrame):
             return
 
         selected_indices = self.chapter_listbox.curselection()
-        if self.chapters and selected_indices:
+        
+        if not self.chapters:
+            # No chapters detected, send full book
+            selected_chapters = [{"title": "Full Book", "text": self.raw_text}]
+        elif not selected_indices:
+            messagebox.showerror(
+                "Selection Required", 
+                "Please select chapters to be sent to characters.\nPlease select 1 to 3 chapters."
+            )
+            return
+        elif len(selected_indices) > 3:
+            messagebox.showerror(
+                "Too Many Chapters", 
+                "Please select no more than 3 chapters to send to characters tab."
+            )
+            return
+        else:
             selected_chapters = [
                 {"title": self.chapters[i]["title"], "text": self.chapters[i]["text"]}
                 for i in selected_indices
             ]
-        else:
-            selected_chapters = [{"title": "Full Book", "text": self.raw_text}]
 
         self.set_book_text_cb(selected_chapters)
         self.go_to_characters_cb()

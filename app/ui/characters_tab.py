@@ -369,12 +369,15 @@ class CharactersTab(ctk.CTkFrame):
             fg_color = "#ffffff"
             select_bg = "#404040"
             select_fg = "#ffffff"
+            # Dark grey background for processing queue (different from line backgrounds)
+            queue_bg_color = "#252525"
         else:
             # Light theme colors
             bg_color = "#ffffff"
             fg_color = "#000000"
             select_bg = "#0078d4"
             select_fg = "#ffffff"
+            queue_bg_color = bg_color
         
         # Apply to character listbox
         if self.char_list:
@@ -389,9 +392,9 @@ class CharactersTab(ctk.CTkFrame):
         if self.placeholder_label:
             self.placeholder_label.config(bg=bg_color, fg=fg_color)
         
-        # Apply to scroll frame background
+        # Apply to scroll frame background (processing queue background)
         if self.scroll_frame:
-            self.scroll_frame.config(bg=bg_color)
+            self.scroll_frame.config(bg=queue_bg_color)
         
         # Regenerate character colors for new theme
         old_colors = self.character_colors.copy()
@@ -1227,11 +1230,17 @@ class CharactersTab(ctk.CTkFrame):
             fg_color = "#ffffff"
             select_bg = "#404040"
             select_fg = "#ffffff"
+            # Dark grey background for processing queue (different from line backgrounds)
+            queue_bg_color = "#252525"
+            # Lighter text color for better readability
+            queue_text_color = "#f0f0f0"
         else:
             bg_color = "#ffffff"
             fg_color = "#000000"
             select_bg = "#0078d4"
             select_fg = "#ffffff"
+            queue_bg_color = bg_color
+            queue_text_color = fg_color
 
         # Apply filters
         search_text = self.search_var.get().lower().strip()
@@ -1321,7 +1330,7 @@ class CharactersTab(ctk.CTkFrame):
                 width=1,  # Will be controlled by pack
                 bg=row_bg_color, 
                 font=("Arial", line_font_size), 
-                fg=fg_color,
+                fg=queue_text_color,  # Use lighter text color for better readability
                 relief="flat",
                 borderwidth=0,
                 highlightthickness=0,
