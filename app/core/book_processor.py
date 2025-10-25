@@ -598,49 +598,405 @@ def run_book_processor(booktxt_path: str) -> List[Dict[str, str]]:
     """
     import os
     try:
-        lines = parse_booktxt(booktxt_path)
-        
-        # Try to find the .quotes file in the same directory
-        # booktxt_path is like: output/booknlp_xxx/book_input.book.txt
-        # quotes file is like: output/booknlp_xxx/book_input.quotes
-        base_path = booktxt_path.replace('.book.txt', '.quotes')
-        if os.path.exists(base_path):
-            lines = merge_quote_spans(lines, base_path)
-            print(f"[BookProcessor] Merged quote spans using {base_path}")
-        
+        # Prefer reconstructing rows strictly from BookNLP .quotes + .book.plain.txt
+        # so each quote span is atomic and flagged is_quote=True end-to-end.
+        base_dir = os.path.dirname(booktxt_path)
+        prefix = os.path.basename(booktxt_path).replace('.book.txt', '')
+        quotes_path = os.path.join(base_dir, f"{prefix}.quotes")
+        plain_path = os.path.join(base_dir, f"{prefix}.book.plain.txt")
+
+        def _normalize_name(n: str) -> str:
+            try:
+                base = (n or '').strip()
+                if not base:
+                    return 'Unknown'
+                # If mention is all lower or a simple pronoun/determiner, treat as Unknown
+                low = base.lower()
+                if low == base:
+                    return 'Unknown'
+                if low in {'he','she','they','him','her','them','his','hers','their','thy','the','a','an','it'}:
+                    return 'Unknown'
+                return normalize_name(base)
+            except Exception:
+                return (n or '').strip() or 'Unknown'
+
+        def _build_hard_rows_from_quotes(qpath: str, plain_path: str, tokens_path: str | None) -> List[Dict[str, str]]:
+            import csv
+            # Read full document plain text once
+            try:
+                with open(plain_path, 'r', encoding='utf-8', errors='replace') as f:
+                    doc_text = f.read()
+            except Exception:
+                return []
+
+            # Optional: load characters mapping to prefer canonical names from char_id
+            char_id_to_name: dict[int, str] = {}
+            try:
+                base = os.path.dirname(qpath)
+                pref = os.path.basename(qpath).replace('.quotes', '')
+                cands = [
+                    os.path.join(base, f"{pref}.characters.json"),
+                    os.path.join(base, f"{pref}.characters_simple.json"),
+                ]
+                import json as _json
+                for cc in cands:
+                    if os.path.exists(cc):
+                        with open(cc, 'r', encoding='utf-8', errors='replace') as cf:
+                            cdata = _json.load(cf)
+                        # Try both schemas
+                        chars = cdata.get('characters') or []
+                        for c in chars:
+                            cid = c.get('id', c.get('char_id'))
+                            try:
+                                cid = int(cid)
+                            except Exception:
+                                continue
+                            name = (
+                                c.get('canonical_name')
+                                or c.get('normalized_name')
+                                or c.get('name')
+                            )
+                            if name:
+                                char_id_to_name[cid] = name
+                        break
+            except Exception:
+                char_id_to_name = {}
+
+            # Optional: token_id -> (char_begin, char_end)
+            tok2char = {}
+            if tokens_path and os.path.exists(tokens_path):
+                try:
+                    with open(tokens_path, 'r', encoding='utf-8', errors='replace') as tf:
+                        header = None
+                        for line in tf:
+                            line = line.rstrip('\n')
+                            if not line:
+                                continue
+                            parts = line.split('\t')
+                            if header is None:
+                                header = [c.strip().lower() for c in parts]
+                                continue
+                            row = {header[i]: parts[i] for i in range(min(len(header), len(parts)))}
+                            try:
+                                # token id within document (support various header names)
+                                tid_s = (
+                                    row.get('token_id')
+                                    or row.get('id')
+                                    or row.get('token_id_within_document')
+                                    or row.get('tokenid')
+                                )
+                                cb_s = (
+                                    row.get('char_begin')
+                                    or row.get('char_start')
+                                    or row.get('begin')
+                                    or row.get('byte_onset')
+                                )
+                                ce_s = (
+                                    row.get('char_end')
+                                    or row.get('char_stop')
+                                    or row.get('end')
+                                    or row.get('byte_offset')
+                                )
+                                tid = int(tid_s)
+                                cb = int(cb_s)
+                                ce = int(ce_s)
+                            except Exception:
+                                continue
+                            tok2char[tid] = (cb, ce)
+                except Exception:
+                    tok2char = {}
+
+            # Helpers for text normalization and glyph expansion
+            def _strip_outer_quotes(s: str) -> str:
+                s = (s or '').strip()
+                if not s:
+                    return s
+                pairs = {('“', '”'), ('"', '"'), ('«', '»')}
+                for lo, hi in pairs:
+                    if s.startswith(lo) and s.endswith(hi):
+                        return s[len(lo):-len(hi)]
+                if (s.startswith("'") and s.endswith("'")):
+                    return s[1:-1]
+                return s
+
+            def _norm_for_match(s: str) -> str:
+                """Normalize quote text so BookNLP token spacing matches document spans."""
+                import re as _re
+
+                text = (s or '')
+                text = text.replace('\u2019', "'").replace('\u2018', "'")
+                text = text.replace('\u201c', '"').replace('\u201d', '"')
+                text = _strip_outer_quotes(text)
+                # Some BookNLP rows are missing closing quotes; trim any stray edges
+                text = text.lstrip('"').rstrip('"')
+                # Collapse any run of whitespace to a single space so newlines align
+                text = _re.sub(r"\s+", " ", text).strip()
+                # BookNLP tokenization often inserts spaces before punctuation ("word ."),
+                # which does not appear in the raw document. Remove those so sequences like
+                # "That was last summer ." match "That was last summer." exactly.
+                text = _re.sub(r"\s+([.,!?;:])", r"\1", text)
+                return text
+
+            def _build_fuzzy_pattern(raw: str, collapse_space: str = r'\s*') -> str:
+                """Build a regex that tolerates curly quotes/apostrophes and flexible spacing."""
+                import re as _re
+                text = (raw or '')
+                text = text.replace('\u2019', "'").replace('\u2018', "'")
+                text = text.replace('\u201c', '"').replace('\u201d', '"')
+                pat = _re.escape(text)
+                # Allow variable whitespace between tokens
+                pat = pat.replace(_re.escape(' '), collapse_space)
+                # Let straight apostrophes match curly variants as well
+                pat = pat.replace("'", "[’']")
+                # Allow straight double-quotes to match smart quotes too
+                pat = pat.replace('\\"', '["“”]')
+                return pat
+
+            def _expand_glyphs(doc: str, start: int, end: int) -> tuple[int, int]:
+                # Expand [start,end) to include surrounding opening/closing quote glyphs with whitespace in-between
+                OPEN = {"\u201c", '"', '\u00ab'}  # “, ", «
+                CLOSE = {"\u201d", '"', '\u00bb'}  # ”, ", »
+                # Look left for opening glyph
+                li = start - 1
+                while li >= 0 and doc[li].isspace():
+                    li -= 1
+                if li >= 0 and doc[li] in OPEN:
+                    start = li
+                # Look right for closing glyph
+                ri = end
+                nd = len(doc)
+                while ri < nd and doc[ri].isspace():
+                    ri += 1
+                if ri < nd and doc[ri] in CLOSE:
+                    end = ri + 1
+                return start, end
+
+            import difflib
+            import re as _re
+
+            # Pre-split the BookNLP quotes file into individual quote segments so that
+            # multi-quote rows ("A?" "B...") can be aligned one-by-one with the
+            # document text.
+            RX_SEGMENT = _re.compile(r'(?:[\u201c"])(?:.*?)(?:[\u201d"])', _re.S)
+            quote_segments = []
+            with open(qpath, newline='', encoding='utf-8', errors='replace') as f:
+                reader = csv.DictReader(f, delimiter='\t')
+                for row_index, r in enumerate(reader):
+                    qtext = (r.get('quote') or r.get('text') or '').strip()
+                    if not qtext:
+                        continue
+                    mention = (r.get('mention_phrase') or '').strip()
+                    cid = r.get('char_id')
+                    try:
+                        cid = int(cid) if cid not in (None, '', '-1') else None
+                    except Exception:
+                        cid = None
+
+                    matches = list(RX_SEGMENT.finditer(qtext))
+                    # If no explicit quote glyphs were detected, treat the entire
+                    # field as one quote segment.
+                    if not matches:
+                        matches = [None]
+
+                    for seg_idx, seg_match in enumerate(matches):
+                        if seg_match is None:
+                            raw_seg = qtext
+                        else:
+                            raw_seg = seg_match.group(0)
+                        norm_seg = _norm_for_match(raw_seg)
+                        if not norm_seg:
+                            continue
+                        quote_segments.append({
+                            'norm': norm_seg,
+                            'raw': raw_seg,
+                            'char_id': cid,
+                            'mention': mention,
+                            'source_row': row_index,
+                            'source_seg': seg_idx,
+                        })
+
+            if not quote_segments:
+                return []
+
+            # Extract every quoted span from the plain document text.
+            RX_DOC_QUOTE = _re.compile(r'(?:[\u201c"]?)(?:.*?)(?:[\u201d"])', _re.S)
+            doc_quotes = []
+            for match in RX_DOC_QUOTE.finditer(doc_text):
+                chunk_text = match.group(0)
+                norm_chunk = _norm_for_match(chunk_text)
+                if not norm_chunk:
+                    continue
+                doc_quotes.append({
+                    'start': match.start(),
+                    'end': match.end(),
+                    'text': chunk_text,
+                    'norm': norm_chunk,
+                })
+
+            if not doc_quotes:
+                return []
+
+            # Align each document quote with the next best segment from the BookNLP
+            # outputs using exact match first and SequenceMatcher as a soft fallback.
+            seg_idx = 0
+            max_debug_mismatch = 5
+            for dq in doc_quotes:
+                assigned = None
+                assigned_index = None
+                # Try exact match within a limited lookahead window.
+                lookahead_limit = min(len(quote_segments), seg_idx + 12)
+                for candidate_idx in range(seg_idx, lookahead_limit):
+                    seg = quote_segments[candidate_idx]
+                    if dq['norm'] == seg['norm']:
+                        assigned = seg
+                        assigned_index = candidate_idx
+                        break
+                    # Allow prefix/suffix containment when BookNLP truncates or spans
+                    if seg['norm'] and (dq['norm'].startswith(seg['norm']) or seg['norm'].startswith(dq['norm'])):
+                        assigned = seg
+                        assigned_index = candidate_idx
+                        break
+
+                if assigned is None:
+                    # Soft match using SequenceMatcher ratio.
+                    best_score = 0.0
+                    best_seg = None
+                    best_idx = None
+                    for candidate_idx in range(seg_idx, lookahead_limit):
+                        seg = quote_segments[candidate_idx]
+                        score = difflib.SequenceMatcher(None, dq['norm'], seg['norm']).ratio()
+                        if score > best_score:
+                            best_score = score
+                            best_seg = seg
+                            best_idx = candidate_idx
+                        if score >= 0.995:  # practically identical
+                            break
+                    if best_seg is not None and best_score >= 0.72:
+                        assigned = best_seg
+                        assigned_index = best_idx
+
+                if assigned is not None:
+                    dq['char_id'] = assigned['char_id']
+                    dq['mention'] = assigned['mention']
+                    dq['source_row'] = assigned['source_row']
+                    dq['source_seg'] = assigned['source_seg']
+                    seg_idx = assigned_index + 1
+                else:
+                    dq['char_id'] = None
+                    dq['mention'] = ''
+                    if max_debug_mismatch > 0:
+                        print(f"[DEBUG] Unmatched quote segment: {dq['text'][:80]!r}")
+                        max_debug_mismatch -= 1
+
+            # Emit narration/quote rows sequentially.
+            rows_out: List[Dict[str, str]] = []
+            cursor = 0
+            for dq in doc_quotes:
+                qs, qe = dq['start'], dq['end']
+                if cursor < qs:
+                    nbeg, nend = cursor, qs
+                    narr = doc_text[nbeg:nend]
+                    narr_s = narr.strip()
+                    if narr_s:
+                        rows_out.append({
+                            'speaker': 'Narrator',
+                            'text': narr_s,
+                            'is_quote': False,
+                            '_hard_quote': False,
+                            '_char_begin': nbeg,
+                            '_char_end': nend,
+                        })
+
+                cid = dq.get('char_id')
+                mention = dq.get('mention') or ''
+                if isinstance(cid, int) and cid in char_id_to_name:
+                    speaker = char_id_to_name[cid]
+                else:
+                    cleaned = _re.sub(r'^(?:\w+ed|\w+s|said|asked|replied|answered|whispered|shouted|muttered|cried|called|yelled|murmured|hissed|breathed|snapped|growled|moaned|told)\s+', '', mention.strip(), flags=_re.I)
+                    speaker = _normalize_name(cleaned)
+                if not speaker or speaker.lower() in {'narrator', 'the narrator'}:
+                    speaker = 'Unknown'
+
+                rows_out.append({
+                    'speaker': speaker,
+                    'text': doc_text[qs:qe],
+                    'is_quote': True,
+                    '_hard_quote': True,
+                    '_char_begin': qs,
+                    '_char_end': qe,
+                    '_char_id': cid,
+                })
+                cursor = qe
+
+            if cursor < len(doc_text):
+                nbeg, nend = cursor, len(doc_text)
+                tail = doc_text[nbeg:nend]
+                tail_s = tail.strip()
+                if tail_s:
+                    rows_out.append({
+                        'speaker': 'Narrator',
+                        'text': tail_s,
+                        'is_quote': False,
+                        '_hard_quote': False,
+                        '_char_begin': nbeg,
+                        '_char_end': nend,
+                    })
+
+            return rows_out
+
+        # Try to locate tokens file alongside
+        tokens_path = os.path.join(base_dir, f"{prefix}.tokens")
+        if not os.path.exists(tokens_path):
+            # tolerate .tokens.txt variant
+            alt = os.path.join(base_dir, f"{prefix}.tokens.txt")
+            tokens_path = alt if os.path.exists(alt) else None
+
+        hard_rows: List[Dict[str, str]] = []
+        if os.path.exists(quotes_path) and os.path.exists(plain_path):
+            hard_rows = _build_hard_rows_from_quotes(quotes_path, plain_path, tokens_path)
+            if hard_rows:
+                print(f"[BookProcessor] Built {len(hard_rows)} hard-quote rows from {os.path.basename(quotes_path)}")
+
+        if hard_rows:
+            lines = hard_rows
+        else:
+            # Fallback to the parser + merging heuristics
+            lines = parse_booktxt(booktxt_path)
+            base_path = booktxt_path.replace('.book.txt', '.quotes')
+            if os.path.exists(base_path):
+                lines = merge_quote_spans(lines, base_path)
+                print(f"[BookProcessor] Merged quote spans using {base_path}")
+
         # Split embedded quotes in narrator text BEFORE merging
-        # This prevents attribution text from being merged with embedded quote content
         before_split = len(lines)
         lines = split_embedded_quotes_in_narration(lines)
         after_split = len(lines)
         if before_split != after_split:
             print(f"[BookProcessor] Split embedded quotes: {before_split} → {after_split} rows")
-        
+
         # Merge consecutive narrator blocks for TTS narrator voice
         before_narrator_merge = len([r for r in lines if not r.get('is_quote') == 'True'])
         lines = merge_narrator_blocks(lines)
         after_narrator_merge = len([r for r in lines if not r.get('is_quote') == 'True'])
         if before_narrator_merge != after_narrator_merge:
             print(f"[BookProcessor] Merged narrator blocks: {before_narrator_merge} → {after_narrator_merge}")
-        
+
         # Convert __EMBEDDED_QUOTE__ markers back to Narrator
-        # These were kept separate during merge to preserve embedded quote boundaries
         for row in lines:
             if row.get('speaker') == '__EMBEDDED_QUOTE__':
                 row['speaker'] = 'Narrator'
-        
+
         # Filter out stray/empty quotes (artifacts from BookNLP)
         filtered = []
         for row in lines:
             text = row.get('text', '').strip()
-            # Remove rows that are just quote marks or very short non-content
             if len(text) <= 2 and text in ('', '"', '""', "'", "''", '...'):
                 continue
             filtered.append(row)
-        
+
         if len(filtered) < len(lines):
             print(f"[BookProcessor] Filtered {len(lines) - len(filtered)} empty/stray quote rows")
-        
+
         return filtered
     except Exception as e:
         print(f"[BookProcessor] Error parsing {booktxt_path}: {e}")
