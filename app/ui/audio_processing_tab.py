@@ -338,15 +338,15 @@ class AudioProcessingTab(ctk.CTkFrame):
         is_dark = ctk.get_appearance_mode() == "Dark"
         
         if is_dark:
-            # Dark theme colors
-            bg_color = "#2b2b2b"
+            # Dark theme colors - use grey background with white text
+            bg_color = "#606060"
             fg_color = "#ffffff"
-            tree_bg = "#2b2b2b"
+            tree_bg = "#606060"
             tree_fg = "#ffffff"
             tree_select_bg = "#404040"
             tree_select_fg = "#ffffff"
-            odd_bg = "#3a3a3a"
-            even_bg = "#2b2b2b"
+            odd_bg = "#707070"
+            even_bg = "#606060"
         else:
             # Light theme colors
             bg_color = "#ffffff"
@@ -375,6 +375,10 @@ class AudioProcessingTab(ctk.CTkFrame):
         if self.tree:
             self.tree.tag_configure('oddrow', background=odd_bg)
             self.tree.tag_configure('evenrow', background=even_bg)
+        
+        # Update tree frame background
+        if hasattr(self, 'tree_frame') and self.tree_frame:
+            self.tree_frame.configure(fg_color=tree_bg)
 
     def stop_processing(self):
         """Stop processing (gracefully)"""
@@ -530,6 +534,28 @@ class AudioProcessingTab(ctk.CTkFrame):
             return
 
         self.jobs_to_process = selected_jobs
+        
+        # Calculate total segments after splitting
+        total_segments = 0
+        for idx, job in selected_jobs:
+            lines = job.get("lines", [])
+            speakers = job.get("speakers", ["Unknown"] * len(lines))
+            voice_entries = job.get("voice_entries", [{}] * len(lines))
+            voice_labels = job.get("voice_labels", [""] * len(lines))
+            
+            # Simulate preprocessing to count actual segments
+            processed_lines = []
+            for text, speaker, voice_entry, voice_label in zip(lines, speakers, voice_entries, voice_labels):
+                if len(text) > 200:
+                    chunks = self._split_long_text(text, max_chars=199)
+                    processed_lines.extend(chunks)
+                else:
+                    processed_lines.append(text)
+            total_segments += len(processed_lines)
+        
+        self.total_lines = total_segments
+        self._update_statistics()
+        
         os.makedirs(self.output_root, exist_ok=True)
         self.processing = True
         self.worker_thread = threading.Thread(target=self._process_loop, daemon=True)
@@ -564,9 +590,9 @@ class AudioProcessingTab(ctk.CTkFrame):
                 processed_voice_labels = []
                 
                 for text, speaker, voice_entry, voice_label in zip(lines, speakers, voice_entries, voice_labels):
-                    if len(text) > 250:
-                        # Split long text into chunks (XTTS has 250 char limit for English)
-                        chunks = self._split_long_text(text, max_chars=249)
+                    if len(text) > 200:
+                        # Split long text into chunks (XTTS has 200 char limit for safety)
+                        chunks = self._split_long_text(text, max_chars=199)
                         self.log_debug(f"[AudioProcessingTab] Split long text ({len(text)} chars) into {len(chunks)} chunks")
                         # Add each chunk with the same speaker/voice
                         for chunk in chunks:
@@ -739,7 +765,7 @@ class AudioProcessingTab(ctk.CTkFrame):
         
         Args:
             text: The text to split
-            max_chars: Maximum characters per chunk (default 250 for XTTS limit)
+            max_chars: Maximum characters per chunk (default 200 for XTTS limit)
             
         Returns:
             List of text chunks with continuation markers where needed
@@ -777,7 +803,30 @@ class AudioProcessingTab(ctk.CTkFrame):
         if current_chunk.strip():
             chunks.append(current_chunk.strip())
         
-        return chunks if chunks else [text]
+        # Ensure all chunks are within max_chars limit
+        final_chunks = []
+        for chunk in chunks:
+            if len(chunk) <= max_chars:
+                final_chunks.append(chunk)
+            else:
+                # Force split long chunks at word boundaries
+                words = chunk.split()
+                temp_chunk = ""
+                for word in words:
+                    if len(temp_chunk) + len(word) + 1 > max_chars:
+                        if temp_chunk:
+                            final_chunks.append(temp_chunk.strip())
+                            temp_chunk = word
+                        else:
+                            # Word itself is too long - take it anyway to avoid infinite loop
+                            final_chunks.append(word)
+                            temp_chunk = ""
+                    else:
+                        temp_chunk += (" " if temp_chunk else "") + word
+                if temp_chunk:
+                    final_chunks.append(temp_chunk.strip())
+        
+        return final_chunks if final_chunks else [text]
     
     def _split_long_sentence_smart(self, sentence: str, max_chars: int) -> list:
         """

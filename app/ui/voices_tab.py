@@ -83,13 +83,13 @@ class VoicesTab(ctk.CTkFrame):
         )
         
         # Voice list with scrollbar
-        list_frame = ctk.CTkFrame(left_panel)
-        list_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        self.list_frame = ctk.CTkFrame(left_panel)
+        self.list_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
         # Treeview for voice list
         columns = ("name", "type", "gender", "age", "accent")
         self.voice_tree = ttk.Treeview(
-            list_frame,
+            self.list_frame,
             columns=columns,
             show="headings",
             height=15,
@@ -106,7 +106,7 @@ class VoicesTab(ctk.CTkFrame):
         self.voice_tree.column("age", width=80)
         self.voice_tree.column("accent", width=100)
         
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.voice_tree.yview)
+        scrollbar = ttk.Scrollbar(self.list_frame, orient="vertical", command=self.voice_tree.yview)
         self.voice_tree.configure(yscrollcommand=scrollbar.set)
         
         self.voice_tree.pack(side="left", fill="both", expand=True)
@@ -180,10 +180,10 @@ class VoicesTab(ctk.CTkFrame):
         is_dark = ctk.get_appearance_mode() == "Dark"
         
         if is_dark:
-            # Dark theme colors
-            bg_color = "#2b2b2b"
+            # Dark theme colors - use grey background with white text
+            bg_color = "#606060"
             fg_color = "#ffffff"
-            tree_bg = "#2b2b2b"
+            tree_bg = "#606060"
             tree_fg = "#ffffff"
             tree_select_bg = "#404040"
             tree_select_fg = "#ffffff"
@@ -211,6 +211,10 @@ class VoicesTab(ctk.CTkFrame):
             background=[("selected", tree_select_bg)],
             foreground=[("selected", tree_select_fg)]
         )
+        
+        # Update list frame background
+        if hasattr(self, 'list_frame') and self.list_frame:
+            self.list_frame.configure(fg_color=tree_bg)
         
         # Apply to stats label
         if self.stats_label:
