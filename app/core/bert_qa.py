@@ -10,9 +10,10 @@ ENDC = '\033[0m'
 
 class QuotationAttribution:
 
-	def __init__(self, modelFile):
+	def __init__(self, modelFile, device=None):
 
-		device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+		if device is None:
+			device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
 		base_model=re.sub("google_bert", "google/bert", os.path.basename(modelFile))
 		base_model=re.sub("\.model$", "", base_model)

@@ -33,7 +33,7 @@ print("using device", device)
 
 class BERTCorefTagger(nn.Module):
 
-	def __init__(self, gender_cats, freeze_bert=False, base_model=None, pronominalCorefOnly=True):
+	def __init__(self, gender_cats, freeze_bert=False, base_model=None, pronominalCorefOnly=True, device=None):
 		super(BERTCorefTagger, self).__init__()
 
 		modelName=base_model
@@ -62,6 +62,11 @@ class BERTCorefTagger(nn.Module):
 		self.bert.resize_token_embeddings(len(self.tokenizer))
 
 		self.bert.eval()
+
+		if device is not None:
+			self.bert = self.bert.to(device)
+
+		self.device = device
 
 		self.vec_get_distance_bucket=np.vectorize(self.get_distance_bucket)
 
@@ -110,21 +115,21 @@ class BERTCorefTagger(nn.Module):
 
 	def get_mention_reps(self, input_ids=None, attention_mask=None, starts=None, ends=None, index=None, widths=None, quotes=None, matrix=None, transforms=None, doTrain=True):
 
-		starts=starts.to(device)
-		ends=ends.to(device)
-		widths=widths.to(device)
+		starts=starts.to(self.device)
+		ends=ends.to(self.device)
+		widths=widths.to(self.device)
 
-		quotes=quotes.to(device)
+		quotes=quotes.to(self.device)
 
-		input_ids = input_ids.to(device)
-		attention_mask = attention_mask.to(device)
-		transforms = transforms.to(device)
+		input_ids = input_ids.to(self.device)
+		attention_mask = attention_mask.to(self.device)
+		transforms = transforms.to(self.device)
 
 		# matrix specifies which token positions (cols) are associated with which mention spans (row)
-		matrix=matrix.to(device) # num_sents x max_ents x max_words
+		matrix=matrix.to(self.device) # num_sents x max_ents x max_words
 
 		# index specifies the location of the mentions in each sentence (which vary due to padding)
-		index=index.to(device)
+		index=index.to(self.device)
 
 		_, pooled_outputs, sequence_outputs = self.bert(input_ids, token_type_ids=None, attention_mask=attention_mask, output_hidden_states=True, return_dict=False)
 
@@ -255,6 +260,18 @@ class BERTCorefTagger(nn.Module):
 		if truth is not None:
 			doTrain=True
 
+		device = self.device
+
+		# Move all tensor inputs to device
+		matrix = [m.to(device) for m in matrix]
+		index = [i.to(device) for i in index]
+		starts = [s.to(device) for s in starts]
+		ends = [e.to(device) for e in ends]
+		widths = [w.to(device) for w in widths]
+		input_ids = [i.to(device) for i in input_ids]
+		attention_mask = [a.to(device) for a in attention_mask]
+		transforms = [t.to(device) for t in transforms]
+
 		zeroTensor=torch.FloatTensor([0]).to(device)
 
 		entity_properties={}
@@ -298,8 +315,8 @@ class BERTCorefTagger(nn.Module):
 				all_starts=torch.cat((all_starts, starts[b]), 0)
 				all_ends=torch.cat((all_ends, ends[b]), 0)
 
-		all_starts=all_starts.to(device)
-		all_ends=all_ends.to(device)
+		all_starts=all_starts.to(self.device)
+		all_ends=all_ends.to(self.device)
 		
 		num_mentions,=all_starts.shape
 
@@ -436,11 +453,11 @@ class BERTCorefTagger(nn.Module):
 									same_speaker.append(0)
 
 
-					same_speaker_embeds=self.speaker_embeddings(torch.LongTensor(same_speaker).to(device))
+					same_speaker_embeds=self.speaker_embeddings(torch.LongTensor(same_speaker).to(self.device))
 
 					# get distance in mentions
 					dists=self.vec_get_distance_bucket(ent_dist)
-					dists=torch.LongTensor(dists).to(device)
+					dists=torch.LongTensor(dists).to(self.device)
 					distance_embeds=self.distance_embeddings(dists)
 
 					# is the current mention nested within a previous one?
@@ -457,8 +474,8 @@ class BERTCorefTagger(nn.Module):
 						else:
 							nest2.append(0)
 
-					nesteds_embeds=self.nested_embeddings(torch.LongTensor(nest1).to(device))
-					nesteds_embeds2=self.nested_embeddings(torch.LongTensor(nest2).to(device))
+					nesteds_embeds=self.nested_embeddings(torch.LongTensor(nest1).to(self.device))
+					nesteds_embeds2=self.nested_embeddings(torch.LongTensor(nest2).to(self.device))
 
 					elementwise=cp*targets
 					concat=torch.cat((cp, targets, elementwise, distance_embeds, nesteds_embeds, nesteds_embeds2, same_speaker_embeds), 1)
@@ -480,7 +497,7 @@ class BERTCorefTagger(nn.Module):
 					if len(truth[i]) == 0:
 						golds_sum=0.
 					else:
-						golds=torch.index_select(preds, 0, torch.LongTensor(truth[i]).to(device))
+						golds=torch.index_select(preds, 0, torch.LongTensor(truth[i]).to(self.device))
 						golds_sum=torch.logsumexp(golds, 0)
 
 					# want to maximize (golds_sum-preds_sum), so minimize (preds_sum-golds_sum)

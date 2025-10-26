@@ -8,10 +8,12 @@ import os
 from app.core.gpu_manager import get_torch_device
 
 class LitBankEntityTagger:
-	def __init__(self, model_file, model_tagset, task_id=None):
+	def __init__(self, model_file, model_tagset, task_id=None, device=None):
 
-		device = get_torch_device(task_id)
+		if device is None:
+			device = get_torch_device(task_id)
 		print(f"[LitBankEntityTagger] Using device: {device}")
+		self.device = device
 		self.tagset=sequence_layered_reader.read_tagset(model_tagset)
 		supersenseTagset = pkg_resources.resource_filename(__name__, "data/supersense.tagset")
 

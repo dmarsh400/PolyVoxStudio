@@ -825,7 +825,7 @@ def init_enlp_caches(quotes_path, entities_path, html_path=None):
 
 class EnglishBookNLP:
 
-    def __init__(self, model_params):
+    def __init__(self, model_params, device=None):
 
         with torch.no_grad():
 
@@ -955,17 +955,17 @@ class EnglishBookNLP:
             self.quoteTagger=QuoteTagger()
 
             if self.doEntities:
-                self.entityTagger=LitBankEntityTagger(self.entityPath, tagsetPath)
+                self.entityTagger=LitBankEntityTagger(self.entityPath, tagsetPath, device=device)
                 aliasPath = pkg_resources.resource_filename(__name__, "data/aliases.txt")
                 self.name_resolver=NameCoref(aliasPath)
 
 
             if self.doQuoteAttrib:
-                self.quote_attrib=QuotationAttribution(self.quoteAttribModel)
+                self.quote_attrib=QuotationAttribution(self.quoteAttribModel, device=device)
 
             
             if self.doCoref:
-                self.litbank_coref=LitBankCoref(self.coref_model, self.gender_cats, pronominalCorefOnly=pronominalCorefOnly)
+                self.litbank_coref=LitBankCoref(self.coref_model, self.gender_cats, pronominalCorefOnly=pronominalCorefOnly, device=device)
 
             self.tagger=SpacyPipeline(spacy_nlp)
 
@@ -2156,8 +2156,10 @@ class EnglishBookNLP:
             s = re.sub(r'\s*\[/\]\s*$', '', s).strip()
             return s
 
+        # Normalize punctuation spacing in the plain text too, mirroring the tagged lines
+        plain_lines = [self.fix_punctuation_spacing(_strip_tags(line)).strip() for line in result_lines]
         with open(join(outFolder, f"{idd}.book.plain.txt"), "w", encoding="utf-8") as outp:
-            outp.write("\n".join(_strip_tags(line) for line in result_lines))
+            outp.write("\n".join(plain_lines))
 
         return result_lines
 
@@ -2403,18 +2405,17 @@ class EnglishBookNLP:
                 if self.doEntities:
                     assignments=copy.deepcopy(refs)
 
-                if self.doCoref:
-                    torch.cuda.empty_cache()
-                    assignments=self.litbank_coref.tag(tokens, entities, refs, genders, attributed_quotations, quotes)
+            if self.doCoref:
+                torch.cuda.empty_cache()
+                assignments=self.litbank_coref.tag(tokens, entities, refs, genders, attributed_quotations, quotes)
 
-                    print("--- coref: %.3f seconds ---" % (time.time() - start_time))
-                    start_time=time.time()
-
-                    ent_names={}
-                    for a, e in zip(assignments, entities):
-                        if a not in ent_names:
-                            ent_names[a]=Counter()
-                        ent_names[a][e[3]]+=1
+                print("--- coref: %.3f seconds ---" % (time.time() - start_time))
+                start_time=time.time()
+                ent_names={}
+                for a, e in zip(assignments, entities):
+                    if a not in ent_names:
+                        ent_names[a]=Counter()
+                    ent_names[a][e[3]]+=1
                 
                     # Update gender estimates from coref data
                     genders=genderEM.update_gender_from_coref(genders, entities, assignments)

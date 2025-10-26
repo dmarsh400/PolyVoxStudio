@@ -10,7 +10,6 @@ from typing import Optional, Tuple
 import numpy as np
 import soundfile as sf
 from scipy import signal
-import librosa
 
 
 class AudioPostProcessor:
@@ -30,15 +29,7 @@ class AudioPostProcessor:
         except (subprocess.CalledProcessError, FileNotFoundError):
             print("⚠️  FFmpeg not found. Install for better performance: apt-get install ffmpeg")
             return False
-        
-    # --- Style presets (subtle post synthesis prosody shading) ----------------
-    def apply_style_preset(self, audio: np.ndarray, preset: str) -> np.ndarray:
-        """
-        Apply style preset - currently disabled for cleaner audio.
-        """
-        # Return audio unchanged to avoid artificial effects
-        return audio
-
+    
     def normalize_audio(self, audio: np.ndarray, target_peak: float = 0.95) -> np.ndarray:
         """
         Normalize audio to consistent peak level
@@ -325,61 +316,6 @@ class AudioPostProcessor:
         }
         
         return output_path, stats
-    
-    def enhance_audio(self, input_path, output_path):
-        """
-        Enhance audio quality using FFmpeg filters or Python processing.
-        
-        Args:
-            input_path: Path to input audio file
-            output_path: Path to save enhanced audio
-        """
-        try:
-            # Check input duration
-            if os.path.exists(input_path):
-                audio_in, sr_in = sf.read(input_path)
-                dur_in = len(audio_in) / sr_in
-                print(f"[AudioPostProcessor] Input audio duration: {dur_in:.2f}s ({len(audio_in)} samples @ {sr_in}Hz)")
-            else:
-                print(f"[AudioPostProcessor] Input file does not exist: {input_path}")
-                return
-            
-            if input_path == output_path:
-                # In-place enhancement: use temp file
-                import tempfile
-                import os
-                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-                    temp_path = tmp.name
-                try:
-                    self.process(input_path, temp_path, enhance=True, method='auto')
-                    # Check temp duration
-                    if os.path.exists(temp_path):
-                        audio_temp, sr_temp = sf.read(temp_path)
-                        dur_temp = len(audio_temp) / sr_temp
-                        print(f"[AudioPostProcessor] Temp audio duration: {dur_temp:.2f}s")
-                    # Move temp to output
-                    import shutil
-                    shutil.move(temp_path, output_path)
-                finally:
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
-            else:
-                self.process(input_path, output_path, enhance=True, method='auto')
-            
-            # Check output duration
-            if os.path.exists(output_path):
-                audio_out, sr_out = sf.read(output_path)
-                dur_out = len(audio_out) / sr_out
-                print(f"[AudioPostProcessor] Output audio duration: {dur_out:.2f}s ({len(audio_out)} samples @ {sr_out}Hz)")
-            else:
-                print(f"[AudioPostProcessor] Output file not created: {output_path}")
-                
-        except Exception as e:
-            print(f"[AudioPostProcessor] Enhancement failed: {e}")
-            # If enhancement fails, copy original file if needed
-            if input_path != output_path:
-                import shutil
-                shutil.copy2(input_path, output_path)
 
 
 # Example usage and testing

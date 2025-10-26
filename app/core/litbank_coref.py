@@ -9,14 +9,15 @@ import pkg_resources
 
 class LitBankCoref:
 
-	def __init__(self, modelFile, gender_cats, pronominalCorefOnly=True):
+	def __init__(self, modelFile, gender_cats, pronominalCorefOnly=True, device=None):
 
-		device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+		if device is None:
+			device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 		base_model=re.sub("google_bert", "google/bert", os.path.basename(modelFile))
 		base_model=re.sub("\.model$", "", base_model)
 
-		self.model = BERTCorefTagger(gender_cats=gender_cats, freeze_bert=True, base_model=base_model, pronominalCorefOnly=pronominalCorefOnly)
+		self.model = BERTCorefTagger(gender_cats=gender_cats, freeze_bert=True, base_model=base_model, pronominalCorefOnly=pronominalCorefOnly, device=device)
 		state_dict = torch.load(modelFile, map_location=device)
 		# Filter out unexpected keys
 		state_dict = {k: v for k, v in state_dict.items() if not k.startswith('bert.embeddings.position_ids')}

@@ -163,10 +163,6 @@ def split_multi_quote_rows(rows):
     result = []
     
     for row in rows:
-        # Never split hard-quote rows
-        if row.get("_hard_quote"):
-            result.append(row)
-            continue
         if not row.get("is_quote"):
             result.append(row)
             continue
@@ -221,10 +217,6 @@ def split_attribution_from_quotes(rows):
     result = []
     
     for row in rows:
-        # Never split hard-quote rows
-        if row.get("_hard_quote"):
-            result.append(row)
-            continue
         if not row.get("is_quote"):
             # Non-quote rows - pass through unchanged
             result.append(row)
@@ -301,46 +293,17 @@ def split_attribution_from_quotes(rows):
 
 def ensure_strict_quote_narration_separation(rows):
     """
-    CRITICAL: Ensure EVERY distinct quote ("...") gets its own row(s) and EVERYTHING 
-    within quote marks is properly flagged as is_quote=True.
+    Ensure STRICT separation between quoted dialogue and narration.
+    Any text outside of actual quote marks should be marked as Narrator.
+    This splits rows that mix quoted and unquoted text.
     
-    This fixes the major issue where BookNLP gives us one quote span containing multiple
-    sentences, some with quote marks and some without, and we need to preserve the 
-    exact quote boundaries.
-    
-    Rules:
-    1. Find ALL quote pairs ("...") in the text
-    2. Each quote pair becomes one or more quote rows (is_quote=True)
-    3. Text BETWEEN quotes becomes Narrator rows (is_quote=False)
-    4. Text BEFORE first quote becomes Narrator row
-    5. Text AFTER last quote becomes Narrator row
-    6. If a row has NO quote characters, leave it unchanged
-    7. If a row is ENTIRELY one quote, leave it unchanged (already correct)
-    
-    Example: '"Quote 1" some text "Quote 2" more text' → 
-        1. Unknown: '"Quote 1"' (is_quote=True)
-        2. Narrator: 'some text' (is_quote=False)  
-        3. Unknown: '"Quote 2"' (is_quote=True)
-        4. Narrator: 'more text' (is_quote=False)
+    Examples:
+        'He walked in. "Hello," he said.' → splits into:
+            1. Narrator: "He walked in."
+            2. Character: ""Hello,""
+            3. Narrator: "he said."
     """
     import re
-    # If rows already contain hard-quote annotations, trust them and only ensure flags.
-    has_hard = any(r.get("_hard_quote") for r in (rows or []))
-    if has_hard:
-        out = []
-        for r in rows:
-            rr = dict(r)
-            if rr.get("_hard_quote"):
-                rr["is_quote"] = True
-                # Keep speaker if set; default Unknown not Narrator for quotes
-                if not rr.get("speaker") or rr.get("speaker") == "Narrator":
-                    rr["speaker"] = "Unknown"
-            else:
-                rr["is_quote"] = bool(rr.get("is_quote")) and False  # ensure narration stays not-quote
-            out.append(rr)
-        log(f"[strict-sep] Hard-quote rows present: preserved {sum(1 for r in out if r.get('_hard_quote'))} quotes")
-        return out
-
     result = []
     
     for row in rows:
@@ -348,87 +311,57 @@ def ensure_strict_quote_narration_separation(rows):
         if not text:
             continue
         
-        # Check if text contains any quote characters at all
-        has_quotes = '"' in text or '"' in text or '"' in text or "'" in text or "'" in text
+        # Normalize quotes for consistent processing
+        normalized = text.replace('"', '"').replace('"', '"')
         
-        if not has_quotes:
-            # No quotes - keep row as-is (might be narration or attribution)
-            result.append(row)
-            continue
-        
-        # Normalize quotes for consistent processing (all to straight double quotes)
-        normalized = text
-        normalized = normalized.replace('"', '"').replace('"', '"').replace('"', '"')
-        
-        # Find ALL balanced quote pairs: "..."
-        # This regex finds opening quote, content (non-greedy), closing quote
-        quote_pattern = r'"([^"]*?)"'
+        # Find all quoted spans
+        quote_pattern = r'(["""])([^"""]*?)(["""])'
         matches = list(re.finditer(quote_pattern, normalized))
         
         if not matches:
-            # Has quote chars but no balanced pairs - likely fragment with dangling quote
-            # Keep as-is and let other stages handle it
-            result.append(row)
+            # No quotes found - this is pure narration
+            narr_row = dict(row)
+            narr_row["speaker"] = "Narrator"
+            narr_row["is_quote"] = False
+            narr_row["text"] = text
+            result.append(narr_row)
             continue
         
-        # Check if entire text is ONE complete quote (most common case)
-        # Match must start at beginning and end at/near end (allowing trailing punctuation/space)
-        if len(matches) == 1:
-            match = matches[0]
-            # Check if quote starts at beginning
-            before_quote = normalized[:match.start()].strip()
-            # Check if quote ends at/near end (allow max 3 trailing chars like punctuation)
-            after_quote = normalized[match.end():].strip()
-            
-            if not before_quote and len(after_quote) <= 3:
-                # Entire row is one quote - keep as-is, just ensure proper flags
-                quote_row = dict(row)
-                quote_row["is_quote"] = True
-                if not quote_row.get("speaker") or quote_row.get("speaker") == "Narrator":
-                    quote_row["speaker"] = "Unknown"
-                result.append(quote_row)
-                continue
-        
-        # Complex case: Multiple quotes or quotes mixed with narration
-        # Split into separate rows maintaining quote boundaries
-        log(f"[strict-sep] Splitting row with {len(matches)} quote(s): {text[:80]}...")
-        
-        last_pos = 0
+        # Process text with quotes - split into narration and dialogue parts
+        last_end = 0
         
         for match in matches:
-            quote_start = match.start()  # Position of opening "
-            quote_end = match.end()      # Position after closing "
+            # Text before this quote (narration)
+            before_start = last_end
+            before_end = match.start()
+            before_text = text[before_start:before_end].strip()
             
-            # Text BEFORE this quote (narration)
-            before_text = normalized[last_pos:quote_start].strip()
             if before_text:
+                # This is narration before the quote
                 narr_row = dict(row)
                 narr_row["speaker"] = "Narrator"
                 narr_row["is_quote"] = False
                 narr_row["text"] = before_text
                 result.append(narr_row)
             
-            # The quote itself (INCLUDING the quote marks)
-            quote_text = normalized[quote_start:quote_end].strip()
+            # The quoted text itself (character dialogue)
+            quote_start = match.start()
+            quote_end = match.end()
+            quote_text = text[quote_start:quote_end]
             
-            # Skip if it's just empty quotes like ""
-            if len(quote_text) <= 2 or match.group(1).strip() == "":
-                last_pos = quote_end
-                continue
+            if quote_text.strip():
+                quote_row = dict(row)
+                quote_row["text"] = quote_text
+                quote_row["is_quote"] = True
+                # Keep original speaker if it exists and isn't Narrator
+                if not quote_row.get("speaker") or quote_row.get("speaker") == "Narrator":
+                    quote_row["speaker"] = "Unknown"
+                result.append(quote_row)
             
-            # Create quote row with proper flags
-            quote_row = dict(row)
-            quote_row["text"] = quote_text
-            quote_row["is_quote"] = True
-            # Preserve speaker if already assigned, otherwise mark Unknown
-            if not quote_row.get("speaker") or quote_row.get("speaker") == "Narrator":
-                quote_row["speaker"] = "Unknown"
-            result.append(quote_row)
-            
-            last_pos = quote_end
+            last_end = quote_end
         
-        # Text AFTER all quotes (narration)
-        after_text = normalized[last_pos:].strip()
+        # Text after all quotes (narration)
+        after_text = text[last_end:].strip()
         if after_text:
             narr_row = dict(row)
             narr_row["speaker"] = "Narrator"
@@ -436,7 +369,6 @@ def ensure_strict_quote_narration_separation(rows):
             narr_row["text"] = after_text
             result.append(narr_row)
     
-    log(f"[strict-sep] Split {len(rows)} rows into {len(result)} rows")
     return result
 
 def finalize_quote_narration_blocks(rows):
@@ -468,14 +400,6 @@ def finalize_quote_narration_blocks(rows):
     quote_buffer = None
     
     for idx, row in enumerate(rows):
-        # Preserve atomic hard-quote rows as-is
-        if row.get("_hard_quote"):
-            if narr_buffer:
-                out.append(narr_buffer); narr_buffer = None
-            if quote_buffer:
-                out.append(quote_buffer); quote_buffer = None
-            out.append(row)
-            continue
         if row.get("is_quote"):
             # Flush narration buffer if any
             if narr_buffer:
@@ -570,6 +494,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from app.core.book_processor import run_book_processor
+from app.core.booknlp_runner import run_booknlp
 
 
 # ===================== MISCELLANEOUS UTILITIES =====================
@@ -750,16 +675,11 @@ def _qa_emit_quote_report(output_dir: str, prefix: str):
       2) {prefix}quote_events.tsv  : only suspicious transitions per RID
     """
     try:
-        import os
         series = DBG.get("_qa_series") or []
         if not series:
             _qa_safe_log("[qa] no series captured; skip report")
 
             # Removed stray, incorrectly indented code block that was outside any function.
-        # Prepare output file paths
-        report_path = os.path.join(output_dir or ".", f"{prefix}.quote_report.tsv")
-        events_path = os.path.join(output_dir or ".", f"{prefix}.quote_events.tsv")
-
         stage_maps = []
         for stage, snap in series:
             m = {row["rid"]: row for row in snap}
@@ -768,7 +688,6 @@ def _qa_emit_quote_report(output_dir: str, prefix: str):
         def excerpt(s):
             return (s or "").replace("\t", " ").replace("\n", "\\n")[:200]
 
-        # Write events report (transitions of interest)
         with open(events_path, "w", encoding="utf-8") as f:
             f.write(
                 "prev_stage\tstage\trid\tevent\tspan_prev\tspan_cur\tglyph_prev\tglyph_cur\t"
@@ -843,20 +762,6 @@ def _qa_emit_quote_report(output_dir: str, prefix: str):
                             f"{prev['speaker']}\t{cur['speaker']}\t"
                             f"{excerpt(prev['txt'])}\t{excerpt(cur['txt'])}\n"
                         )
-
-        # Write full per-stage snapshot report (lightweight)
-        try:
-            with open(report_path, "w", encoding="utf-8") as rf:
-                rf.write(
-                    "stage\trid\tidx\tis_quote\tspan_cnt\tglyph_cnt\tbal\tspeaker\tqa_demoted\texcerpt\n"
-                )
-                for stage, snap in series:
-                    for row in snap:
-                        rf.write(
-                            f"{stage}\t{row['rid']}\t{row['idx']}\t{int(row['is_quote'])}\t{row['span_cnt']}\t{row['glyph_cnt']}\t{row['bal']}\t{row['speaker']}\t{int(row['qa_demoted'])}\t{excerpt(row['txt'])}\n"
-                        )
-        except Exception as e:
-            _qa_safe_log(f"[qa] failed to write report: {e}")
 
         _qa_safe_log(f"[qa] wrote {report_path}")
         _qa_safe_log(f"[qa] wrote {events_path}")
@@ -5773,14 +5678,6 @@ def _edge_peel_pass_inplace(results, alias_inv):
     """
     if not results:
         return results
-    # Do not peel when quotes are atomic or hard-quote rows are present
-    if globals().get("QUOTES_ARE_ATOMIC"):
-        return results
-    try:
-        if any(r.get("_hard_quote") for r in results or []):
-            return results
-    except Exception:
-        pass
     for i, r in enumerate(results):
         if r.get("is_quote"):
             continue
@@ -5809,8 +5706,7 @@ def _reassert_quote_flags_inplace(results):
     for r in out:
         t = _norm_unicode_quotes(r.get("text") or "")
         spans = _quote_spans(t)
-        # Never flip flags on hard-quote rows (they should already be correct)
-        if spans and not r.get("is_quote", False) and not r.get("_hard_quote"):
+        if spans and not r.get("is_quote", False):
             r["is_quote"] = True
             changes += 1
     try:
@@ -5834,12 +5730,6 @@ def _split_results_on_multiple_quote_spans(rows, alias_inv=None):
     """
     if globals().get("QUOTES_ARE_ATOMIC"):
         return rows
-    # If inputs carry hard-quote rows, preserve them by avoiding multi-span splitting
-    try:
-        if any(r.get("_hard_quote") for r in rows or []):
-            return rows
-    except Exception:
-        pass
     if not rows:
         return rows
 
@@ -6930,13 +6820,6 @@ def _split_midquote_attrib_clauses_early(rows, *_args):
     if not rows:
         return rows
 
-    # If quotes are globally atomic, do not split
-    if globals().get("QUOTES_ARE_ATOMIC"):
-        return rows
-
-    # If the input already contains hard-quote rows, we should not split those at all
-    has_hard = any(r.get("_hard_quote") for r in rows or [])
-
     # full quoted spans (straight or curly)
     RX_SPAN = re.compile(r'([“"][^“”"]*[”"])')
 
@@ -7034,10 +6917,6 @@ def _split_midquote_attrib_clauses_early(rows, *_args):
 
     out = []
     for idx, row in enumerate(rows):
-        # Never split hard-quote rows – preserve exactly as constructed
-        if has_hard and row.get("_hard_quote"):
-            out.append(row)
-            continue
         if not row.get("is_quote"):
             out.append(row)
             continue
@@ -7982,125 +7861,6 @@ def _strip_stray_edge_quotes(rows):
         )
     except Exception:
         pass
-
-    return out
-
-
-def _final_split_quote_narration(rows: list[dict]) -> list[dict]:
-    """Final safety net to ensure quotes and narration never live in the same row.
-
-    Some late-stage merges (speaker inheritance, tail merges, UI cleanup) can glue
-    dialogue text together with surrounding narration or keep attribution fragments
-    flagged as quotes. This pass reiterates the quote boundary logic on the fully
-    processed rows so GUI consumers always see clean quote/narration alternation.
-
-    Strategy:
-      * Split any row that contains one or more quoted spans plus narration outside
-        those spans into dedicated quote/narration rows.
-      * Convert quote rows that lost their glyphs back into narration.
-      * Preserve speaker locks when possible; otherwise, infer speaker from nearby
-        quotes or fall back to "Unknown".
-    """
-
-    if not rows:
-        return rows
-
-    out = []
-    n = len(rows)
-
-    def _nearest_named_speaker(idx: int) -> str | None:
-        # Prefer previous quote speaker, otherwise look ahead.
-        for j in range(idx - 1, -1, -1):
-            rj = rows[j]
-            sp = (rj.get("speaker") or "").strip()
-            if rj.get("is_quote") and sp not in {"", "Unknown", "Narrator"}:
-                return sp
-        for j in range(idx + 1, n):
-            rj = rows[j]
-            sp = (rj.get("speaker") or "").strip()
-            if rj.get("is_quote") and sp not in {"", "Unknown", "Narrator"}:
-                return sp
-        return None
-
-    for idx, row in enumerate(rows):
-        txt = row.get("text") or ""
-        stripped = txt.strip()
-
-        if not stripped:
-            out.append(dict(row))
-            continue
-
-        # Normalise quotes for span detection (length preserving).
-        norm = _norm_unicode_quotes(txt)
-        try:
-            spans = _quote_spans(norm)
-        except Exception:
-            spans = []
-
-        if not spans:
-            # No quote spans – ensure narration semantics.
-            if row.get("is_quote"):
-                rr = dict(row)
-                rr["is_quote"] = False
-                if rr.get("speaker") not in (None, "", "Narrator", "Unknown") and not rr.get("_lock_speaker"):
-                    rr["speaker"] = "Narrator"
-                out.append(rr)
-            else:
-                out.append(dict(row))
-            continue
-
-        # Build ordered segments of narration / quotes.
-        segments: list[tuple[str, str]] = []
-        cursor = 0
-        for start, end in spans:
-            if start > cursor:
-                narr = norm[cursor:start].strip()
-                if narr:
-                    segments.append(("narr", narr))
-            seg = norm[start:end].strip()
-            if seg:
-                segments.append(("quote", seg))
-            cursor = end
-        if cursor < len(norm):
-            tail = norm[cursor:].strip()
-            if tail:
-                segments.append(("narr", tail))
-
-        # If we only have a single quote segment and no narration, keep row as-is.
-        if len(segments) == 1 and segments[0][0] == "quote":
-            rr = dict(row)
-            if rr.get("speaker") in (None, "", "Narrator", "Unknown") and not rr.get("_lock_speaker"):
-                inferred = _nearest_named_speaker(idx)
-                if inferred:
-                    rr["speaker"] = inferred
-                elif rr.get("speaker") == "Narrator":
-                    rr["speaker"] = "Unknown"
-            rr["is_quote"] = True
-            out.append(rr)
-            continue
-
-        # Otherwise split into separate rows.
-        for kind, segment_text in segments:
-            if not segment_text:
-                continue
-            new_row = dict(row)
-            new_row["text"] = segment_text
-            for meta in ("_char_begin", "_char_end", "_char_id", "_hard_quote", "_rid"):
-                new_row.pop(meta, None)
-            if kind == "quote":
-                new_row["is_quote"] = True
-                if new_row.get("speaker") in (None, "", "Narrator", "Unknown") or not new_row.get("is_quote"):
-                    inferred = _nearest_named_speaker(idx)
-                    if inferred:
-                        new_row["speaker"] = inferred
-                    else:
-                        new_row["speaker"] = "Unknown"
-                new_row.pop("_lock_speaker", None)
-            else:
-                new_row["is_quote"] = False
-                new_row["speaker"] = "Narrator"
-                new_row.pop("_lock_speaker", None)
-            out.append(new_row)
 
     return out
 
@@ -9646,18 +9406,6 @@ def _force_split_adjacent_quotes(results):
     if not results:
         return results
 
-    # Respect global atomic-quote policy: do not force-split when quotes are atomic
-    if globals().get("QUOTES_ARE_ATOMIC"):
-        return results
-
-    # If any hard-quote rows are present, avoid this pass entirely to preserve
-    # one-row-per-quote spans built upstream
-    try:
-        if any(r.get("_hard_quote") for r in results or []):
-            return results
-    except Exception:
-        pass
-
     # Close-quote [” or "] then optional punctuation/dash/space, then open-quote [“ or "]
     GLUE_RX = re.compile(r'(["”])\s*[.,;:!?—–-]*\s*(["“])')
 
@@ -9996,13 +9744,6 @@ def _split_inline_tail_attrib_in_quotes(rows, *args):
 
     if not rows:
         return rows
-
-    # Hard-quote preservation: if any hard-quote rows exist, skip this splitter
-    try:
-        if globals().get("QUOTES_ARE_ATOMIC") or any(r.get("_hard_quote") for r in rows or []):
-            return rows
-    except Exception:
-        pass
 
     # Quote glyphs
     OPEN_Q = '“"«'
@@ -10375,11 +10116,6 @@ def _demote_misquoted_attrib_rows(results):
 
         t = (r.get("text") or "").strip()
         if len(t) > 40:  # too long to be a glued attrib-only line
-            out.append(r)
-            continue
-
-        # Never demote hard-quote rows produced from authoritative spans
-        if r.get("_hard_quote"):
             out.append(r)
             continue
 
@@ -13183,7 +12919,9 @@ def attach_action_fragments(results, alias_inv):
         # --- keep or drop the standalone attribution fragment line ---
         # Keep if global KEEP_ATTRIB_TEXT is True OR if this row was explicitly marked
         # by a splitter as a mid-quote attribution we must preserve.
-        keep_fragment = True  # Always keep to preserve text
+        keep_fragment = bool(globals().get("KEEP_ATTRIB_TEXT", False)) or bool(
+            r.get("_keep_attrib_text")
+        )
 
         if keep_fragment:
             # keep as narration
@@ -15466,10 +15204,6 @@ def clean_results(results, qmap=None, alias_inv=None):
 
         # Build the outgoing row (preserve is_quote for downstream passes)
         row_out = {"speaker": speaker, "text": text, "is_quote": is_q}
-        # Preserve hard-quote/source metadata if present so downstream gates respect atomic quotes
-        for k in ("_hard_quote", "_char_begin", "_char_end", "_char_id"):
-            if k in r:
-                row_out[k] = r.get(k)
         if row_cid is not None:
             row_out["_cid"] = row_cid
         if row_qscore is not None:
@@ -15510,22 +15244,19 @@ def clean_results(results, qmap=None, alias_inv=None):
         except Exception:
             sp_norm = (row.get("speaker") or "").lower()
         if sp_norm in PRONOUN_BLACKLIST:
-            # Preserve atomic quote/source metadata through this demotion as well
-            nr = {
-                "speaker": "Narrator",
-                "text": row.get("text", ""),
-                "is_quote": row.get(
-                    "is_quote", looks_like_direct_speech(row.get("text") or "")
-                ),
-                "_cid": row.get("_cid"),
-                "_qscore": row.get("_qscore"),
-                "_lock_speaker": row.get("_lock_speaker"),
-                "_lock_reason": row.get("_lock_reason"),
-            }
-            for k in ("_hard_quote", "_char_begin", "_char_end", "_char_id"):
-                if k in row:
-                    nr[k] = row.get(k)
-            final.append(nr)
+            final.append(
+                {
+                    "speaker": "Narrator",
+                    "text": row.get("text", ""),
+                    "is_quote": row.get(
+                        "is_quote", looks_like_direct_speech(row.get("text") or "")
+                    ),
+                    "_cid": row.get("_cid"),
+                    "_qscore": row.get("_qscore"),
+                    "_lock_speaker": row.get("_lock_speaker"),
+                    "_lock_reason": row.get("_lock_reason"),
+                }
+            )
         else:
             final.append(row)
 
@@ -15662,32 +15393,13 @@ def dump_gui_rows_txt(rows, path):
     except Exception:
         pass
     try:
-        # Presentational whitespace normalizer (GUI-only): collapse spaces around apostrophes
-        import re as _re
-
-        def _normalize_display_whitespace(s: str) -> str:
-            if not s:
-                return s
-            # Fix spaced apostrophes common in .book.plain (e.g., I ’ ve -> I ’ve)
-            s = _re.sub(r"(\b\w)\s+[’']\s*(\w)\b", r"\1’\2", s)
-            # Common contractions with split spaces
-            s = _re.sub(r"\b([Ww])o\s+n’t\b", r"\1on’t", s)
-            s = _re.sub(r"\b([Cc])a\s+n’t\b", r"\1an’t", s)
-            s = _re.sub(r"\b([Dd])o\s+n’t\b", r"\1on’t", s)
-            s = _re.sub(r"\b([Ii])’\s*m\b", r"\1’m", s)
-            s = _re.sub(r"\b([Yy])o\s+u\s+’\s*re\b", r"\1ou’re", s)
-            s = _re.sub(r"\b([Tt])hey\s+’\s*re\b", r"\1hey’re", s)
-            s = _re.sub(r"\b([Ww])e\s+’\s*re\b", r"\1e’re", s)
-            s = _re.sub(r"\b([Ii])[\s’']\s*ve\b", r"\1’ve", s)
-            return s
-
         with open(path, "w", encoding="utf-8") as f:
             for i, r in enumerate(rows or []):
                 f.write(f"--- ROW {i:04d} ---\n")
                 f.write(f"speaker: {(r.get('speaker') or '')}\n")
                 f.write(f"is_quote: {bool(r.get('is_quote'))}\n")
                 f.write("text:\n")
-                t = _normalize_display_whitespace((r.get("text") or "").rstrip())
+                t = (r.get("text") or "").rstrip()
                 f.write(t + ("\n" if not t.endswith("\n") else ""))
                 f.write("\n")
     except Exception as e:
@@ -15769,9 +15481,6 @@ def run_attribution(text, model="big", pipeline="entity,quote,coref"):
 
         log("--- New Attribution Run ---")
         
-        if len(text) > 100000:
-            log(f"Warning: Input text is {len(text)} characters long. Processing may be slow or fail due to memory limits.")
-        
         # Reset ALL global state to ensure clean processing for each chapter
         global DBG, CANON_WHITELIST, SURNAME_TO_CANON, WH_ALIAS, QMAP_CACHE, ALIAS_INV_CACHE, CJ_MAP, CLUSTER_STATS
         
@@ -15799,8 +15508,6 @@ def run_attribution(text, model="big", pipeline="entity,quote,coref"):
         log(f"[GlobalReset] All state variables reset for new chapter processing")
         log(f"Model={model}, Pipeline={pipeline}")
         log(f"TempDir={tmpdir}, OutputDir={output_dir}, Prefix={prefix}")
-
-        from app.core.booknlp_runner import run_booknlp
 
         run_booknlp(
             input_path=input_path,
@@ -15966,13 +15673,6 @@ def run_attribution(text, model="big", pipeline="entity,quote,coref"):
                     for r in results
                 ],
             )
-        
-        # CRITICAL: Split multiple quotes IMMEDIATELY after book_processor
-        # This ensures each distinct "..." quote gets its own row BEFORE any other processing
-        log(f"[quote-sep] BEFORE ensure_strict_quote_narration_separation: {len(results)} rows")
-        results = ensure_strict_quote_narration_separation(results)
-        log(f"[quote-sep] AFTER ensure_strict_quote_narration_separation: {len(results)} rows")
-        
         # Merge consecutive Narrator lines early, before further processing
         log(f"[early-merge] BEFORE _merge_consecutive_narrator_rows: {len(results)} rows")
         # DEBUG: Check for "said Smith" before merge
@@ -16007,8 +15707,10 @@ def run_attribution(text, model="big", pipeline="entity,quote,coref"):
             if "said Smith" in row.get("text", ""):
                 log(f"[clean-after] ROW {i}: speaker={row.get('speaker')} is_quote={row.get('is_quote')} text={row.get('text')[:80]}")
         
-        # Quote separation now runs EARLY (after run_book_processor) not here
-        # This ensures quote boundaries are preserved before any other processing
+        # NEW: Ensure strict separation between quoted and non-quoted text
+        log(f"[strict-sep] BEFORE ensure_strict_quote_narration_separation: {len(results)} rows")
+        results = ensure_strict_quote_narration_separation(results)
+        log(f"[strict-sep] AFTER ensure_strict_quote_narration_separation: {len(results)} rows")
         
         _qa_ensure_audit_header(output_dir, prefix)
         results = _qaudit("after clean_results", results, output_dir, prefix)
@@ -17003,16 +16705,6 @@ def run_attribution(text, model="big", pipeline="entity,quote,coref"):
         results = _reassert_quote_flags(results)
         results = trace_stage("after finalize_speakers", results, output_dir, prefix)
 
-        results = _profile(
-            "after final_split_quote_narration",
-            _final_split_quote_narration,
-            results,
-            output_dir,
-            prefix,
-        )
-        results = _reassert_quote_flags_strict(results)
-        results = _debug_assert_quote_flag_consistency(results)
-
         # Final guard again (safety net)
         results = _profile(
             "after final_guard_no_narrator_quotes (final)",
@@ -17217,153 +16909,3 @@ def run_attribution(text, model="big", pipeline="entity,quote,coref"):
 
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
-
-
-# --- Alternate entry: use existing BookNLP outputs (no re-run) ---
-def run_attribution_from_booktxt(booktxt_path: str):
-    """
-    Run the attribution/finalization pipeline starting from an existing
-    <prefix>.book.txt and companion files (.quotes, .tokens, .characters.json, ...)
-    without invoking BookNLP again. This trusts files co-located with the book.
-    """
-    # Normalize paths
-    output_dir = os.path.dirname(booktxt_path)
-    prefix = Path(booktxt_path).stem
-
-    # Reset global state (mirror run_attribution)
-    global DBG, CANON_WHITELIST, SURNAME_TO_CANON, WH_ALIAS, QMAP_CACHE, ALIAS_INV_CACHE, CJ_MAP, CLUSTER_STATS
-    DBG = {
-        "reassert_strict_runs": 0,
-        "reassert_flag_changes": 0,
-        "lonely_quote_stripped": 0,
-        "narr_tail_splits": 0,
-        "coalesce_skipped_kind": 0,
-        "coalesce_skipped_quote2quote": 0,
-        "coalesce_skipped_attribfrag": 0,
-        "coalesce_merges": 0,
-    }
-    CANON_WHITELIST = set()
-    SURNAME_TO_CANON = {}
-    WH_ALIAS = {}
-    QMAP_CACHE = None
-    ALIAS_INV_CACHE = {}
-    CJ_MAP = {}
-    CLUSTER_STATS = {}
-
-    log("--- Attribution From Existing Outputs ---")
-    log(f"[Existing] OutputDir={output_dir}, Prefix={prefix}")
-
-    # Load characters JSON if available (for aliasing and cluster stats)
-    alias_inv = {}
-    cjson = os.path.join(output_dir, prefix + ".characters.json")
-    cj = None
-    if os.path.exists(cjson):
-        try:
-            with open(cjson, "r", encoding="utf-8", errors="replace") as f:
-                cj = json.load(f)
-            canonicals = [
-                c.get("canonical_name") or c.get("normalized_name")
-                for c in cj.get("characters", [])
-            ]
-            alias_inv = build_alias_map([c for c in canonicals if c])
-
-            # Populate CJ_MAP and CLUSTER_STATS
-            chars = cj.get("characters", []) or []
-            for i, c in enumerate(chars):
-                raw_id = c.get("id", c.get("char_id", c.get("cluster_id", i)))
-                try:
-                    cid = int(raw_id)
-                except Exception:
-                    cid = i
-                name = (
-                    c.get("canonical_name") or c.get("normalized_name") or c.get("name")
-                )
-                if name:
-                    CJ_MAP[cid] = name
-                mentions = c.get("mentions", {}) or {}
-                proper_list = mentions.get("proper") or []
-                if isinstance(proper_list, list):
-                    proper_count = len(proper_list)
-                elif isinstance(proper_list, int):
-                    proper_count = proper_list
-                else:
-                    proper_count = 0
-                total_count = c.get("count", 0)
-                try:
-                    total_count = int(total_count)
-                except Exception:
-                    total_count = 0
-                CLUSTER_STATS[cid] = {"count": total_count, "proper": proper_count}
-        except Exception as e:
-            log(f"[Existing] failed to load characters.json: {e}")
-
-    # Initialize simple whitelist and ENLP caches (best-effort)
-    try:
-        _load_simple_whitelist(output_dir, prefix)
-    except Exception as e:
-        log(f"[Existing] simple whitelist load failed: {e}")
-    try:
-        bootstrap_enlp_caches(output_dir, prefix)
-        log(f"[enlp] caches initialized from: {output_dir}")
-    except Exception as e:
-        log(f"[enlp] init failed: {e}")
-
-    # Quotes map from existing .quotes
-    qmap = load_quotes_map(output_dir, prefix)
-    qmap = _precompute_norm_quotes(qmap)
-    QMAP_CACHE = qmap
-    _merge_quote_counts_into_cluster_stats(qmap)
-    _ensure_cluster_defaults()
-    log(f"[quotes] normalized={len(qmap)}")
-
-    # Build strict alias map now that CJ_MAP/whitelist may be populated
-    ALIAS_INV_CACHE = build_alias_map(sorted(CANON_WHITELIST))
-
-    # Trace init
-    try:
-        trace_init(output_dir, prefix, [])
-    except Exception:
-        pass
-
-    # Processor: build rows from existing files (uses hard-quote path)
-    results = run_book_processor(booktxt_path)
-    log(f"Raw results: {len(results)} lines")
-
-    # Strict separation and early merge
-    log(f"[quote-sep] BEFORE ensure_strict_quote_narration_separation: {len(results)} rows")
-    results = ensure_strict_quote_narration_separation(results)
-    log(f"[quote-sep] AFTER ensure_strict_quote_narration_separation: {len(results)} rows")
-
-    log(f"[early-merge] BEFORE _merge_consecutive_narrator_rows: {len(results)} rows")
-    results = _merge_consecutive_narrator_rows(results)
-    log(f"[early-merge] AFTER _merge_consecutive_narrator_rows: {len(results)} rows")
-
-    # QUICK PATH: Use hard-quote rows directly to preserve quote integrity.
-    # Skip heavy cleaning/attribution that might re-fragment or demote quotes.
-    quick_rows = results
-
-    # Even on the lightweight path, enforce the final split/merge guarantees so the
-    # GUI never sees quotes glued to narration.
-    quick_rows = _final_split_quote_narration(quick_rows)
-    quick_rows = _merge_consecutive_narrator_rows(quick_rows)
-    quick_rows = _reassert_quote_flags_strict(quick_rows)
-    quick_rows = _debug_assert_quote_flag_consistency(quick_rows)
-
-    gui_path = os.path.join(output_dir, f"{prefix}.gui_rows.txt")
-    alt_gui_path = None
-    if prefix.endswith(".book"):
-        alt_gui_path = os.path.join(output_dir, f"{prefix[:-5]}.gui_rows.txt")
-
-    try:
-        dump_gui_rows_txt(quick_rows, gui_path)
-        if alt_gui_path:
-            dump_gui_rows_txt(quick_rows, alt_gui_path)
-        log(
-            f"[quick] Wrote gui_rows ({len(quick_rows)} rows) "
-            f"-> {os.path.basename(gui_path)}"
-            + (f", {os.path.basename(alt_gui_path)}" if alt_gui_path else "")
-        )
-    except Exception as e:
-        log(f"[quick] write gui_rows failed: {e}")
-
-    return quick_rows
