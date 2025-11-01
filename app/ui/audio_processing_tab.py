@@ -815,7 +815,8 @@ class AudioProcessingTab(ctk.CTkFrame):
                 for word in words:
                     if len(temp_chunk) + len(word) + 1 > max_chars:
                         if temp_chunk:
-                            final_chunks.append(temp_chunk.strip())
+                            # Add ellipsis to prevent XTTS hallucinations when truncating mid-sentence
+                            final_chunks.append(temp_chunk.strip() + "...")
                             temp_chunk = word
                         else:
                             # Word itself is too long - take it anyway to avoid infinite loop

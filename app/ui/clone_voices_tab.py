@@ -61,34 +61,23 @@ class CloneVoicesTab(ctk.CTkFrame):
         ctk.CTkLabel(type_frame, text="(voice = character, narrator = narration)", 
                     font=("Arial", 10), text_color="gray").pack(side="left", padx=10)
 
-        # Gender
+                # Gender
         gender_frame = ctk.CTkFrame(metadata_frame)
         gender_frame.pack(fill="x", pady=5, padx=10)
         ctk.CTkLabel(gender_frame, text="Gender:", width=120, anchor="w").pack(side="left", padx=5)
-        self.gender_var = tk.StringVar(value="Unknown")
+        self.gender_var = tk.StringVar(value="Female")
         gender_menu = ctk.CTkOptionMenu(gender_frame, variable=self.gender_var, 
-                                       values=["Male", "Female", "Non-Binary", "Unknown"],
-                                       width=200)
+                                       values=["Male", "Female", "Unknown"], width=200)
         gender_menu.pack(side="left", padx=5)
 
-        # Age Range
+        # Age
         age_frame = ctk.CTkFrame(metadata_frame)
         age_frame.pack(fill="x", pady=5, padx=10)
-        ctk.CTkLabel(age_frame, text="Age Range:", width=120, anchor="w").pack(side="left", padx=5)
+        ctk.CTkLabel(age_frame, text="Age:", width=120, anchor="w").pack(side="left", padx=5)
         self.age_var = tk.StringVar(value="Adult")
         age_menu = ctk.CTkOptionMenu(age_frame, variable=self.age_var, 
-                                     values=["Child", "Teen", "Young Adult", "Adult", "Middle-Aged", "Senior"],
-                                     width=200)
+                                    values=["Teen", "Young Adult", "Adult", "Middle-Aged", "Mature", "Senior", "Unknown"], width=200)
         age_menu.pack(side="left", padx=5)
-
-        # Accent/Style
-        accent_frame = ctk.CTkFrame(metadata_frame)
-        accent_frame.pack(fill="x", pady=5, padx=10)
-        ctk.CTkLabel(accent_frame, text="Accent/Style:", width=120, anchor="w").pack(side="left", padx=5)
-        self.accent_var = tk.StringVar()
-        accent_entry = ctk.CTkEntry(accent_frame, textvariable=self.accent_var, width=300,
-                                   placeholder_text="e.g., 'British', 'Southern US', 'Neutral', 'Dramatic'")
-        accent_entry.pack(side="left", padx=5, fill="x", expand=True)
 
         # Description
         desc_label_frame = ctk.CTkFrame(metadata_frame)
@@ -218,7 +207,6 @@ class CloneVoicesTab(ctk.CTkFrame):
         voice_type = self.voice_type_var.get()
         gender = self.gender_var.get()
         age = self.age_var.get()
-        accent = self.accent_var.get().strip()
         description = self.description_var.get().strip()
 
         # Validate required fields
@@ -236,8 +224,6 @@ class CloneVoicesTab(ctk.CTkFrame):
             metadata_parts.append(gender)
         if age:
             metadata_parts.append(age)
-        if accent:
-            metadata_parts.append(accent)
         
         full_description = description if description else f"Cloned voice: {voice_name}"
         if metadata_parts:
@@ -278,7 +264,6 @@ class CloneVoicesTab(ctk.CTkFrame):
                 "engine": "xtts",
                 "gender": gender,
                 "age": age,
-                "accent": accent if accent else "Custom",
                 "personality": "Custom Cloned",
                 "custom_cloned": True,
                 "source_file": os.path.basename(audio_path)
@@ -314,7 +299,7 @@ class CloneVoicesTab(ctk.CTkFrame):
                 json.dump(data, f, indent=2)
 
             self.log(f"✅ Successfully saved {voice_type}: '{voice_name}'")
-            self.log(f"   Gender: {gender}, Age: {age}, Accent: {accent or 'N/A'}")
+            self.log(f"   Gender: {gender}, Age: {age}")
             
             # Refresh the dropdown
             self.refresh_placeholders()
@@ -325,15 +310,13 @@ class CloneVoicesTab(ctk.CTkFrame):
                 f"Voice '{voice_name}' created successfully!\n\n"
                 f"Type: {voice_type.title()}\n"
                 f"Gender: {gender}\n"
-                f"Age: {age}\n"
-                f"Accent: {accent or 'N/A'}\n\n"
+                f"Age: {age}\n\n"
                 f"The voice is now available in the Voices tab for character assignment."
             )
             
             # Clear form
             self.voice_name_var.set("")
             self.description_var.set("")
-            self.accent_var.set("")
             self.audio_path_var.set("No file selected")
             
         except Exception as e:

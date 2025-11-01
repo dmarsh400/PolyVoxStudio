@@ -117,25 +117,32 @@ class VoicesTab(ctk.CTkFrame):
         btn_frame.pack(fill="x", padx=10, pady=10)
         
         ctk.CTkButton(
-            btn_frame, text="🔄 Refresh List", command=self._refresh_voice_list
+            btn_frame, text="Refresh List", command=self._refresh_voice_list
         ).pack(fill="x", pady=2)
         
         ctk.CTkButton(
-            btn_frame, text="🗑 Delete Selected", command=self._delete_selected_voice,
+            btn_frame, text="Edit Selected", command=self._edit_selected_voice
+        ).pack(fill="x", pady=2)
+        
+        ctk.CTkButton(
+            btn_frame, text="Delete Selected", command=self._delete_selected_voice,
             fg_color="red", hover_color="darkred"
         ).pack(fill="x", pady=2)
         
         ctk.CTkButton(
-            btn_frame, text="ℹ View Details", command=self._view_voice_details
+            btn_frame, text="View Details", command=self._view_voice_details
         ).pack(fill="x", pady=2)
         
         ctk.CTkButton(
-            btn_frame, text="🎵 Test Voice", command=self._test_selected_voice
+            btn_frame, text="Test Voice", command=self._test_selected_voice
         ).pack(fill="x", pady=2)
         
         ctk.CTkButton(
-            btn_frame, text="📝 Set as Default", command=self._set_as_default_narrator
+            btn_frame, text="Set as Default", command=self._set_as_default_narrator
         ).pack(fill="x", pady=2)
+        
+        # Edit Voices Dialog (initially hidden)
+        self.edit_dialog = None
         
         # Voice statistics
         self.stats_label = ctk.CTkLabel(
@@ -158,14 +165,14 @@ class VoicesTab(ctk.CTkFrame):
         )
         
         ctk.CTkButton(
-            right_panel, text="🔄 Refresh Characters", command=self.refresh_characters
+            right_panel, text="Refresh Characters", command=self.refresh_characters
         ).pack(fill="x", padx=10, pady=5)
 
         self.assign_frame = ctk.CTkFrame(right_panel)
         self.assign_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         ctk.CTkButton(
-            right_panel, text="▶ Send to Audio Processing", command=self.send_to_audio_processing,
+            right_panel, text="Send to Audio Processing", command=self.send_to_audio_processing,
             fg_color="green", hover_color="darkgreen"
         ).pack(fill="x", padx=10, pady=10)
         
@@ -539,6 +546,197 @@ class VoicesTab(ctk.CTkFrame):
         
         messagebox.showinfo("Success", f"'{voice_name}' is now the default narrator voice.")
         self._log(f"[VoicesTab] Set default narrator: {voice_name}")
+    
+    def _edit_selected_voice(self):
+        """Open edit dialog for the selected voice"""
+        selection = self.voice_tree.selection()
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a voice to edit.")
+            return
+        
+        item = selection[0]
+        values = self.voice_tree.item(item, "values")
+        voice_name = values[0]
+        
+        # Find the voice
+        all_voices = self.narrators + self.voices
+        voice = None
+        for v in all_voices:
+            if v.get("label") == voice_name:
+                voice = v
+                break
+        
+        if not voice:
+            messagebox.showerror("Error", f"Voice '{voice_name}' not found.")
+            return
+        
+        self._open_edit_dialog(voice)
+    
+    def _open_edit_dialog(self, voice):
+        """Open the voice editing dialog"""
+        if self.edit_dialog:
+            self.edit_dialog.destroy()
+        
+        # Create dialog window
+        self.edit_dialog = ctk.CTkToplevel(self)
+        self.edit_dialog.title(f"Edit Voice: {voice.get('label', 'Unknown')}")
+        self.edit_dialog.geometry("500x600")
+        self.edit_dialog.resizable(False, False)
+        
+        # Make it modal - moved after dialog construction
+        self.edit_dialog.transient(self)
+        
+        # Center the dialog
+        self.edit_dialog.update_idletasks()
+        x = (self.edit_dialog.winfo_screenwidth() // 2) - (500 // 2)
+        y = (self.edit_dialog.winfo_screenheight() // 2) - (600 // 2)
+        self.edit_dialog.geometry(f"+{x}+{y}")
+        
+        # Title
+        ctk.CTkLabel(
+            self.edit_dialog, 
+            text=f"Edit Voice: {voice.get('label', 'Unknown')}", 
+            font=("Arial", 16, "bold")
+        ).pack(pady=20)
+        
+        # Form frame
+        form_frame = ctk.CTkFrame(self.edit_dialog)
+        form_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        
+        # Voice Name
+        ctk.CTkLabel(form_frame, text="Voice Name:", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        name_entry = ctk.CTkEntry(form_frame, width=400)
+        name_entry.insert(0, voice.get("label", ""))
+        name_entry.pack(padx=10, pady=(0, 10))
+        
+        # Type dropdown
+        ctk.CTkLabel(form_frame, text="Type:", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        type_var = ctk.StringVar(value="Standard" if not voice.get("custom_cloned", False) else "Custom Cloned")
+        type_menu = ctk.CTkOptionMenu(
+            form_frame, 
+            values=["Standard", "Custom Cloned"],
+            variable=type_var,
+            width=400
+        )
+        type_menu.pack(padx=10, pady=(0, 10))
+        
+        # Gender dropdown
+        ctk.CTkLabel(form_frame, text="Gender:", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        gender_var = ctk.StringVar(value=voice.get("gender", "Unknown"))
+        gender_menu = ctk.CTkOptionMenu(
+            form_frame, 
+            values=["Male", "Female", "Unknown"],
+            variable=gender_var,
+            width=400
+        )
+        gender_menu.pack(padx=10, pady=(0, 10))
+        
+        # Age dropdown
+        ctk.CTkLabel(form_frame, text="Age:", font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        age_var = ctk.StringVar(value=voice.get("age", "Unknown"))
+        age_menu = ctk.CTkOptionMenu(
+            form_frame, 
+            values=["Teen", "Young Adult", "Adult", "Middle-Aged", "Mature", "Senior", "Unknown"],
+            variable=age_var,
+            width=400
+        )
+        age_menu.pack(padx=10, pady=(0, 20))
+        
+        # Buttons frame
+        btn_frame = ctk.CTkFrame(self.edit_dialog, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=(0, 20))
+        
+        # Save button
+        save_btn = ctk.CTkButton(
+            btn_frame, 
+            text="Save", 
+            command=lambda: self._save_voice_changes(voice, name_entry.get(), type_var.get(), gender_var.get(), age_var.get(), save_as=False),
+            fg_color="green",
+            hover_color="darkgreen"
+        )
+        save_btn.pack(side="left", padx=(0, 10), expand=True)
+        
+        # Save As button
+        save_as_btn = ctk.CTkButton(
+            btn_frame, 
+            text="Save As New", 
+            command=lambda: self._save_voice_changes(voice, name_entry.get(), type_var.get(), gender_var.get(), age_var.get(), save_as=True),
+            fg_color="blue",
+            hover_color="darkblue"
+        )
+        save_as_btn.pack(side="left", expand=True)
+        
+        # Cancel button
+        cancel_btn = ctk.CTkButton(
+            btn_frame, 
+            text="Cancel", 
+            command=self.edit_dialog.destroy,
+            fg_color="gray",
+            hover_color="darkgray"
+        )
+        cancel_btn.pack(side="right", padx=(10, 0), expand=True)
+        
+        # Now that dialog is fully constructed, make it modal
+        self.edit_dialog.grab_set()
+    
+    def _save_voice_changes(self, original_voice, new_name, new_type, new_gender, new_age, save_as=False):
+        """Save the voice changes"""
+        if not new_name.strip():
+            messagebox.showerror("Error", "Voice name cannot be empty.")
+            return
+        
+        # Check for duplicate names (only if not saving as new)
+        if not save_as:
+            all_voices = self.narrators + self.voices
+            for v in all_voices:
+                if v != original_voice and v.get("label") == new_name:
+                    messagebox.showerror("Error", f"A voice with the name '{new_name}' already exists.")
+                    return
+        
+        # Create updated voice data
+        updated_voice = original_voice.copy()
+        updated_voice["label"] = new_name
+        updated_voice["gender"] = new_gender if new_gender != "Unknown" else None
+        updated_voice["age"] = new_age if new_age != "Unknown" else None
+        updated_voice["custom_cloned"] = (new_type == "Custom Cloned")
+        
+        if save_as:
+            # Add as new voice
+            if original_voice in self.narrators:
+                self.narrators.append(updated_voice)
+            else:
+                self.voices.append(updated_voice)
+            messagebox.showinfo("Success", f"Voice '{new_name}' has been created as a new voice.")
+        else:
+            # Update existing voice
+            if original_voice in self.narrators:
+                idx = self.narrators.index(original_voice)
+                self.narrators[idx] = updated_voice
+            else:
+                idx = self.voices.index(original_voice)
+                self.voices[idx] = updated_voice
+            
+            # Update voice selections if the name changed
+            if original_voice.get("label") != new_name:
+                old_name = original_voice.get("label")
+                for char, voice in self.voice_selections.items():
+                    if voice == old_name:
+                        self.voice_selections[char] = new_name
+                self._save_selections()
+            
+            messagebox.showinfo("Success", f"Voice '{new_name}' has been updated.")
+        
+        # Save and refresh
+        self._save_voices_json()
+        self._refresh_voice_list()
+        self.refresh_characters()
+        
+        # Close dialog
+        if self.edit_dialog:
+            self.edit_dialog.destroy()
+            self.edit_dialog = None
+        
+        self._log(f"[VoicesTab] {'Created' if save_as else 'Updated'} voice: {new_name}")
     
     def _save_voices_json(self):
         """Save the current voices back to voices.json"""

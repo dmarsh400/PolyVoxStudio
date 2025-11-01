@@ -2,8 +2,10 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 import customtkinter as ctk
 import random
-import os
 import json
+from datetime import datetime
+from pathlib import Path
+from uuid import uuid4
 
 from app.core import character_detection
 
@@ -177,6 +179,7 @@ class CharactersTab(ctk.CTkFrame):
         self.character_colors = {}
         self.line_vars = []
         self._text_labels = []  # Store references to text labels for dynamic resizing
+        self.last_run_export = None
 
         self.narrator_color = "#555555"
         
@@ -515,6 +518,11 @@ class CharactersTab(ctk.CTkFrame):
         self.character_colors[name] = color
         self.char_list.insert(tk.END, name)
         self.char_list.itemconfig(tk.END, fg=color)
+        # Add to character_order in chapters
+        for chapter in self.chapters:
+            if isinstance(chapter.get("character_order"), list):
+                if name not in chapter["character_order"]:
+                    chapter["character_order"].append(name)
         self.log_debug(f"[CharactersTab] Added character '{name}' with color {color}")
 
     def delete_selected(self):
@@ -531,6 +539,9 @@ class CharactersTab(ctk.CTkFrame):
                     for r in chapter["results"]:
                         if isinstance(r, dict) and r.get("speaker") == name:
                             r["speaker"] = "Unknown"
+                # Remove from character_order
+                if isinstance(chapter.get("character_order"), list):
+                    chapter["character_order"] = [c for c in chapter["character_order"] if c != name]
         self.show_lines()
 
     def merge_selected(self):
@@ -574,6 +585,15 @@ class CharactersTab(ctk.CTkFrame):
         if survivor not in self.character_colors:
             self.character_colors[survivor] = self._get_color(survivor)
 
+        # Update character_order in chapters
+        for chapter in self.chapters:
+            if isinstance(chapter.get("character_order"), list):
+                # Remove merged characters
+                chapter["character_order"] = [c for c in chapter["character_order"] if c not in names or c == survivor]
+                # Ensure survivor is in order
+                if survivor not in chapter["character_order"]:
+                    chapter["character_order"].append(survivor)
+
         self._refresh_char_list()
         self.show_lines()
 
@@ -613,6 +633,11 @@ class CharactersTab(ctk.CTkFrame):
         # Update character colors dictionary
         if old_name in self.character_colors:
             self.character_colors[new_name] = self.character_colors.pop(old_name)
+        
+        # Update character_order in chapters
+        for chapter in self.chapters:
+            if isinstance(chapter.get("character_order"), list):
+                chapter["character_order"] = [new_name if c == old_name else c for c in chapter["character_order"]]
         
         # Refresh display
         self._refresh_char_list()
@@ -1183,23 +1208,80 @@ class CharactersTab(ctk.CTkFrame):
         self.update_idletasks()
 
         total_chapters = len(self.chapters)
+        run_payload = {
+            "total_chapters": total_chapters,
+            "chapters": [],
+        }
         for i, chapter in enumerate(self.chapters):
             text = chapter.get("text", "")
-            results = character_detection.run_attribution(text)
+            title = chapter.get("title")
+            detection = character_detection.run_attribution(text, title=title)
 
-            chapter["results"] = results or []
-            self.log_debug(f"[CharactersTab] Loaded {len(chapter['results'])} lines for chapter {chapter['title']}")
+            lines = detection.get("lines", []) if isinstance(detection, dict) else []
+            order = detection.get("character_order", []) if isinstance(detection, dict) else []
+            metadata = detection.get("characters", {}) if isinstance(detection, dict) else {}
+
+            chapter["results"] = lines
+            chapter["character_order"] = order
+            chapter["characters_meta"] = metadata
+            chapter["detection_raw"] = detection
+
+            run_payload["chapters"].append({
+                "index": i,
+                "title": title,
+                "line_count": len(lines),
+                "character_count": len(order),
+                "character_order": order,
+                "lines": lines,
+                "characters_meta": metadata,
+            })
+
+            self.log_debug(
+                f"[CharactersTab] Loaded {len(lines)} lines and {len(order)} characters for chapter {chapter['title']}"
+            )
 
             progress = (i + 1) / total_chapters
             self.progress_bar.set(progress)
             self.progress_label.configure(text=f"Processing chapter {i+1}/{total_chapters}")
             self.update_idletasks()
 
+        export_path = self._export_detection_run(run_payload)
+
         self.detect_button.configure(state="normal")
         self.progress_bar.set(1.0)
-        self.progress_label.configure(text="Completed")
+        if export_path:
+            self.progress_label.configure(text=f"Saved to {export_path.parent.name}")
+        else:
+            self.progress_label.configure(text="Completed")
         self._refresh_char_list()
         self.show_lines()
+
+    def _export_detection_run(self, payload):
+        """Write the latest detection output to a timestamped folder for sharing."""
+        try:
+            root = Path(__file__).resolve().parents[2]
+            base_dir = root / "output" / "gui_runs"
+            base_dir.mkdir(parents=True, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            run_id = f"{timestamp}_{uuid4().hex[:6]}"
+            run_dir = base_dir / run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+
+            payload = dict(payload or {})
+            payload["run_id"] = run_id
+            payload["generated_at"] = datetime.now().isoformat()
+
+            out_path = run_dir / "gui_output.txt"
+            out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+            self.last_run_export = str(out_path)
+            self.log_debug(f"[CharactersTab] Exported GUI detection output to {out_path}")
+            return out_path
+        except Exception as exc:
+            self.last_run_export = None
+            self.log_debug(f"[CharactersTab] Failed to export GUI detection output: {exc}")
+            return None
 
     # ---------- Show Lines ----------
     def show_lines(self):
@@ -1376,17 +1458,38 @@ class CharactersTab(ctk.CTkFrame):
     # ---------- Character List ----------
     def _refresh_char_list(self):
         self.char_list.delete(0, tk.END)
-        all_results = []
-        for chapter in self.chapters:
-            for r in chapter.get("results", []):
-                if isinstance(r, dict):
-                    all_results.append(r)
 
-        speakers = sorted(
-            set(r.get("speaker", "Unknown") for r in all_results),
-            key=lambda s: (s != "Narrator", s),
-        )
-        for spk in speakers:
+        seen = set()
+        ordered = []
+
+        # Respect detected character order per chapter
+        for chapter in self.chapters:
+            for name in chapter.get("character_order", []) or []:
+                if not name:
+                    continue
+                if name not in seen:
+                    seen.add(name)
+                    ordered.append(name)
+
+        # Include any additional speakers encountered in lines
+        for chapter in self.chapters:
+            for result in chapter.get("results", []) or []:
+                if not isinstance(result, dict):
+                    continue
+                name = result.get("speaker", "Unknown") or "Unknown"
+                if name not in seen:
+                    seen.add(name)
+                    ordered.append(name)
+
+        if "Narrator" in seen:
+            ordered = ["Narrator"] + [name for name in ordered if name != "Narrator"]
+
+        # Remove stale colors for characters no longer present
+        stale = [name for name in self.character_colors.keys() if name not in ordered and name != "Narrator"]
+        for name in stale:
+            self.character_colors.pop(name, None)
+
+        for spk in ordered:
             color = self._get_color(spk)
             self.char_list.insert(tk.END, spk)
             self.char_list.itemconfig(tk.END, fg=color)
