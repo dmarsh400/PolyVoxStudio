@@ -8,28 +8,38 @@ import soundfile as sf
 import numpy as np
 from pathlib import Path
 
+# --- Accent control (removed for simplicity) ---
+
+def normalize_for_tts(text):
+    """Normalize text to prevent TTS drift and artifacts."""
+    import re
+    
+    # Expand common abbreviations
+    abbr = {
+        "Mr.": "Mister", "Mrs.": "Missus", "Ms.": "Miss", "Dr.": "Doctor",
+        "Prof.": "Professor", "etc.": "et cetera", "vs.": "versus",
+        "Jr.": "Junior", "Sr.": "Senior"
+    }
+    for k, v in abbr.items():
+        text = text.replace(k, v)
+    
+    # Remove stray periods in mid-sentence (like A., B.)
+    text = re.sub(r'\b([A-Za-z])\.(\s)', r'\1\2', text)
+    
+    # Handle domains (remove dot in .com etc.)
+    text = re.sub(r'\b(\w+)\.(com|org|net|gov|edu)\b', r'\1 \2', text)
+    
+    # Ensure proper sentence-final punctuation
+    if text and text.rstrip()[-1] not in ".!?":
+        text += "."
+    
+    return text
 
 # Global XTTS model instance (lazy loaded)
 _tts_model = None
 _preprocessor = None
 _postprocessor = None
-# Simple textual style cues (XTTS sometimes responds to these)
-_STYLE_PREFIX = {
-    "whisper": "",
-    "yell": "",
-    "scream": "",
-    "murmur": "",
-    "hiss": "",
-    "growl": "",
-    "laugh": "",
-    "sob": "",
-    "excited": "",
-    "hesitant": "",
-    "calm": "",
-    "surprised": "",
-    "angry": "",
-    "fearful": ""
-}
+
 def get_tts_model():
     """Lazy load and return the XTTS model."""
     global _tts_model
@@ -57,11 +67,6 @@ def get_postprocessor():
     if _postprocessor is None:
         _postprocessor = AudioPostProcessor()
     return _postprocessor
-
-def _synthesize_segment(tts, text, speaker_wav, language, tmp_path):
-    tts.tts_to_file(text=text, file_path=tmp_path, speaker_wav=speaker_wav, language=language)
-    audio, sr = sf.read(tmp_path)
-    return audio, sr
 
 def synthesize_text(voice_entry, text, out_path, job_idx=0):
     """
@@ -93,7 +98,8 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
             for seg in segments:
                 seg["style"] = "none"
 
-        language = voice_entry.get("language", "en")
+        # Resolve language (simplified to English for natural synthesis)
+        language = "en"
 
         print(f"[voices.py] Synthesizing with XTTS on device={device_str} → {out_path}")
         print(f"[voices.py] Using speaker: {os.path.basename(speaker_wav)}, language: {language}")
@@ -102,6 +108,7 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
         # 3) Synthesize each segment with its own style cue, then glue audio
         audio_parts = []
         sr_used = None
+        
         tmp_dir = Path(".polyvox_tmp")
         tmp_dir.mkdir(exist_ok=True)
 
@@ -110,19 +117,27 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
         for idx, seg in enumerate(segments):
             raw_seg = seg["text"]
             style = (seg.get("style") or "none").lower()
-            style_prefix = _STYLE_PREFIX.get(style, "")
-
+            
             # Clean + inject a small textual cue (engine may respond),
             # then rely on post-style shaping to guarantee an audible change.
-            cleaned = preprocessor.prepare_for_tts(style_prefix + raw_seg)
+            cleaned = preprocessor.prepare_for_tts(raw_seg)
+            
+            # Normalize text to prevent drift
+            cleaned = normalize_for_tts(cleaned)
+
+            # Bias orthography + lexicon for the target accent (removed for simplicity)
+            text_to_synth = cleaned
 
             tmp_wav = tmp_dir / f"seg_{job_idx}_{idx}.wav"
             print(f"[voices.py] Synthesizing segment {idx}: '{cleaned}' (len={len(cleaned)})")
             tts.tts_to_file(
-                text=cleaned,
+                text=text_to_synth,
                 file_path=str(tmp_wav),
                 speaker_wav=speaker_wav,
-                language=language
+                language=language,
+                temperature=0.8,
+                top_p=0.95,
+                top_k=50
             )
             if os.path.exists(str(tmp_wav)):
                 audio_check, _ = sf.read(str(tmp_wav))
@@ -133,6 +148,12 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
             audio, sr = sf.read(str(tmp_wav))
             if sr_used is None:
                 sr_used = sr
+
+            # Add trailing silence to prevent end-of-sequence drift
+            silence_duration = 0.2  # 200ms
+            silence_samples = int(silence_duration * sr)
+            silence = np.zeros(silence_samples, dtype=audio.dtype)
+            audio = np.concatenate([audio, silence])
 
             # Subtle post-style shading per segment
             audio = post.apply_style_preset(audio, style)
@@ -155,10 +176,19 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
             prev_style = current_style
             
             if len(glued) >= fade and len(part) >= fade:
-                # Improved crossfade with cosine window
-                x = np.linspace(0, np.pi/2, fade)
-                cross = glued[-fade:] * np.cos(x) + part[:fade] * np.sin(x)
-                glued = np.concatenate([glued[:-fade], cross, part[fade:]])
+                # Use proper Hann window crossfade to prevent artifacts
+                # Hann window: 0.5 * (1 - cos(2πt/T)) for smooth fade
+                t = np.linspace(0, 1, fade)
+                hann_fade_out = 0.5 * (1 - np.cos(2 * np.pi * t))  # Fade out: 1 → 0
+                hann_fade_in = 0.5 * (1 + np.cos(2 * np.pi * t))   # Fade in: 0 → 1
+                
+                # Apply crossfade
+                fade_out_section = glued[-fade:] * hann_fade_out
+                fade_in_section = part[:fade] * hann_fade_in
+                cross_section = fade_out_section + fade_in_section
+                
+                # Concatenate: [glued_without_fade] + [crossfaded_section] + [part_without_fade]
+                glued = np.concatenate([glued[:-fade], cross_section, part[fade:]])
             else:
                 glued = np.concatenate([glued, part])
 

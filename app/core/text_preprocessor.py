@@ -171,6 +171,144 @@ class TextPreprocessor:
             text = re.sub(rf'\b{digit}\b', word, text)
         return text
 
+    def handle_currency(self, text: str) -> str:
+        """Convert currency amounts to natural speech format"""
+        # Handle dollar amounts like $6000 -> "six thousand dollars"
+        def convert_dollar_amount(match):
+            amount = match.group(1)
+            # Remove commas and convert to words
+            amount_clean = amount.replace(',', '')
+            try:
+                # Convert number to words
+                num_words = self._number_to_words(int(amount_clean))
+                return f"{num_words} dollars"
+            except ValueError:
+                # If conversion fails, return original
+                return match.group(0)
+
+        # Match $ followed by number (with optional commas)
+        text = re.sub(r'\$([0-9,]+)', convert_dollar_amount, text)
+        return text
+
+    def handle_ammo_calibers(self, text: str) -> str:
+        """Convert ammo calibers to natural speech format"""
+        # Common ammo caliber mappings
+        caliber_mappings = {
+            # Metric calibers
+            r'\b9mm\b': 'nine millimeter',
+            r'\b10mm\b': 'ten millimeter',
+            r'\b11mm\b': 'eleven millimeter',
+            r'\b12mm\b': 'twelve millimeter',
+            r'\b13mm\b': 'thirteen millimeter',
+            r'\b14mm\b': 'fourteen millimeter',
+            r'\b15mm\b': 'fifteen millimeter',
+            r'\b16mm\b': 'sixteen millimeter',
+            r'\b17mm\b': 'seventeen millimeter',
+            r'\b18mm\b': 'eighteen millimeter',
+            r'\b19mm\b': 'nineteen millimeter',
+            r'\b20mm\b': 'twenty millimeter',
+            r'\b21mm\b': 'twenty one millimeter',
+            r'\b22mm\b': 'twenty two millimeter',
+
+            # Decimal calibers (spoken as individual digits)
+            r'\.22\b': 'twenty two',
+            r'\.223\b': 'two two three',
+            r'\.224\b': 'two two four',
+            r'\.243\b': 'two forty three',
+            r'\.270\b': 'two seventy',
+            r'\.280\b': 'two eighty',
+            r'\.308\b': 'three oh eight',
+            r'\.30-06\b': 'thirty oh six',
+            r'\.30-30\b': 'thirty thirty',
+            r'\.300\b': 'three hundred',
+            r'\.303\b': 'three oh three',
+            r'\.308\b': 'three oh eight',
+            r'\.310\b': 'three ten',
+            r'\.32\b': 'three two',
+            r'\.327\b': 'three two seven',
+            r'\.338\b': 'three three eight',
+            r'\.340\b': 'three forty',
+            r'\.35\b': 'three five',
+            r'\.350\b': 'three fifty',
+            r'\.357\b': 'three five seven',
+            r'\.360\b': 'three sixty',
+            r'\.375\b': 'three seven five',
+            r'\.38\b': 'three eight',
+            r'\.380\b': 'three eighty',
+            r'\.40\b': 'four oh',
+            r'\.405\b': 'four oh five',
+            r'\.408\b': 'four oh eight',
+            r'\.410\b': 'four ten',
+            r'\.416\b': 'four sixteen',
+            r'\.44\b': 'four four',
+            r'\.444\b': 'four forty four',
+            r'\.45\b': 'four five',
+            r'\.450\b': 'four fifty',
+            r'\.454\b': 'four fifty four',
+            r'\.460\b': 'four sixty',
+            r'\.480\b': 'four eighty',
+            r'\.50\b': 'fifty',
+            r'\.500\b': 'five hundred',
+            r'\.505\b': 'five oh five',
+
+            # Additional calibers
+            r'\b45-70\b': 'forty five seventy',
+
+            # Shotgun gauges
+            r'\b12 gauge\b': 'twelve gauge',
+            r'\b16 gauge\b': 'sixteen gauge',
+            r'\b20 gauge\b': 'twenty gauge',
+            r'\b28 gauge\b': 'twenty eight gauge',
+            r'\.410 gauge\b': 'four ten gauge',
+        }
+
+        # Apply mappings
+        for pattern, replacement in caliber_mappings.items():
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+        return text
+
+    def _number_to_words(self, num: int) -> str:
+        """Convert number to words (basic implementation)"""
+        if num == 0:
+            return 'zero'
+
+        # Handle negative numbers
+        if num < 0:
+            return 'negative ' + self._number_to_words(-num)
+
+        # Define word mappings
+        ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+        teens = ['', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+                'seventeen', 'eighteen', 'nineteen']
+        tens = ['', 'ten', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+        thousands = ['', 'thousand', 'million', 'billion']
+
+        def _convert_hundreds(n):
+            if n == 0:
+                return ''
+            elif n < 10:
+                return ones[n]
+            elif n < 20:
+                return teens[n-10]
+            elif n < 100:
+                return tens[n//10] + ('' if n%10 == 0 else ' ' + ones[n%10])
+            else:
+                return ones[n//100] + ' hundred' + ('' if n%100 == 0 else ' ' + _convert_hundreds(n%100))
+
+        if num == 0:
+            return 'zero'
+
+        result = ''
+        i = 0
+        while num > 0:
+            if num % 1000 != 0:
+                result = _convert_hundreds(num % 1000) + ' ' + thousands[i] + ' ' + result
+            num //= 1000
+            i += 1
+
+        return result.strip()
+
     # (5) OPTIONAL: make “FBI” -> “F. B. I.” for clearer letter-by-letter reading
     def space_acronyms(self, text: str) -> str:
         return re.sub(r'\b([A-Z]{2,})\b', lambda m: '. '.join(m.group(1)) + '.', text)
@@ -303,6 +441,8 @@ class TextPreprocessor:
         expand_abbrev: bool = True,
         add_prosody: bool = True,
         convert_numbers: bool = False,
+        handle_currency: bool = True,
+        handle_calibers: bool = True,
         dehyphen_mode: str = "space",          # "space" | "join" | "off"
         apply_acronyms: bool = False,          # (5) optional
         shield_links: bool = False             # (5) optional
@@ -315,6 +455,8 @@ class TextPreprocessor:
             expand_abbrev: Expand abbreviations (Mr. -> Mister)
             add_prosody: Add spacing hints for natural pauses
             convert_numbers: Convert numbers to words
+            handle_currency: Convert currency amounts to natural speech
+            handle_calibers: Convert ammo calibers to natural speech
             dehyphen_mode: how to treat intra-word hyphens ("space", "join", "off")
             apply_acronyms: optional pass to spell out acronyms
             shield_links: optional pass to replace URLs/emails
@@ -335,32 +477,40 @@ class TextPreprocessor:
         if dehyphen_mode in ("space", "join"):
             text = self.dehyphenate_compounds(text, mode=dehyphen_mode)
 
-        # Step 3: Expand abbreviations
+        # Step 3: Handle currency (before abbreviations to avoid conflicts)
+        if handle_currency:
+            text = self.handle_currency(text)
+
+        # Step 4: Handle ammo calibers
+        if handle_calibers:
+            text = self.handle_ammo_calibers(text)
+
+        # Step 5: Expand abbreviations
         if expand_abbrev:
             text = self.expand_abbreviations(text)
 
-        # Step 4: Convert numbers (optional)
+        # Step 6: Convert numbers (optional)
         if convert_numbers:
             text = self.handle_numbers(text)
 
-        # (5) Optional passes (disabled by default)
+        # (7) Optional passes (disabled by default)
         if shield_links:
             text = self.shield_urls_emails(text)
         if apply_acronyms:
             text = self.space_acronyms(text)
 
-        # Step 5: Fix punctuation
+        # Step 7: Fix punctuation
         text = self.fix_punctuation(text)
 
-        # Step 6: Add prosody hints
+        # Step 8: Add prosody hints
         if add_prosody:
             text = self.add_prosody_hints(text)
 
-        # Step 7: Clean whitespace
+        # Step 9: Clean whitespace
         text = self.remove_excessive_whitespace(text)
 
-        # Step 8: Limit length (XTTS works best with shorter segments)
-        # If text is very long, just use first part
+        # Step 10: Limit length (XTTS works best with shorter segments)
+        # If text is very long, truncate at sentence boundary and add completion marker
         max_length = 500
         if len(text) > max_length:
             # Find last sentence boundary before max_length
@@ -373,7 +523,14 @@ class TextPreprocessor:
             if last_period > 0:
                 text = text[:last_period + 1]
             else:
-                text = truncated
+                # No sentence boundary found - truncate at word boundary and add ellipsis
+                # to prevent XTTS from hallucinating sentence completions
+                truncated = text[:max_length]
+                last_space = truncated.rfind(' ')
+                if last_space > max_length * 0.8:  # Only truncate at space if not too far back
+                    text = text[:last_space] + '...'
+                else:
+                    text = truncated + '...'  # Force truncation with ellipsis
 
         return text
 
@@ -393,6 +550,15 @@ if __name__ == "__main__":
         'Mr. Smith went to St. James Ave. on 5th St.',
         'Wait--did you see that?!?!  I think...no, I\'m sure!!!',
         'Email me at dev@example.com or visit https://site.test/docs.',
+        # Currency tests
+        "The car costs $6000 and the house costs $250,000.",
+        "He paid $1500 for the gun.",
+        # Caliber tests
+        "He used a 9mm pistol and .308 rifle.",
+        "The .380 ACP is a common caliber.",
+        "She shot the .22 target with her .30-06.",
+        "The .357 Magnum is powerful.",
+        "He loaded .45 ACP rounds into his pistol.",
     ]
     for i, t in enumerate(tests, 1):
         print(f"\nTest {i}\nIn : {t}")
