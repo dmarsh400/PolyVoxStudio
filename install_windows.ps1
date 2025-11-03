@@ -8,7 +8,8 @@
 #>
 
 param(
-    [string]$Python = "py"
+    [string]$Python = "py",
+    [switch]$AutoTorch
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,33 +20,157 @@ $pythonArgs = @("-3")
 
 function Ensure-Python {
     param([string]$Executable)
+
+    $minimum = 'import sys; assert sys.version_info >= (3,9)'
+    $candidates = @()
+
     if ($Executable -eq "py") {
-        try {
-            & $Executable @("-3", "-c", "import sys; assert sys.version_info >= (3,9)")
-            return @($Executable, "-3")
-        } catch {
-            Write-Error "Python launcher 'py -3' not found or too old. Install Python 3.9+ from https://python.org" -ErrorAction Stop
+        $candidates += ,@("py", "-3")
+        $candidates += ,@("py", "-3.11")
+        $candidates += ,@("py", "-3.10")
+        $candidates += ,@("py", "-3.9")
+    } elseif ($Executable) {
+        $candidates += ,@($Executable)
+    }
+
+    $candidates += ,@("python")
+    $candidates += ,@("python3")
+    $candidates += ,@("python3.11")
+    $candidates += ,@("python3.10")
+    $candidates += ,@("python3.9")
+
+    $unique = @()
+    $seen = @{}
+    foreach ($entry in $candidates) {
+        if (-not $entry) { continue }
+        $key = $entry -join ' '
+        if (-not $seen.ContainsKey($key)) {
+            $seen[$key] = $true
+            $unique += ,$entry
         }
     }
 
-    try {
-        & $Executable "-c" "import sys; assert sys.version_info >= (3,9)"
-        return @($Executable)
-    } catch {
-        Write-Error "Python executable '$Executable' not found or version < 3.9." -ErrorAction Stop
+    if (-not $unique) {
+        Write-Error "No Python executables to test. Install Python 3.9+ from https://python.org" -ErrorAction Stop
+    }
+
+    $preferredKey = $unique[0] -join ' '
+    foreach ($entry in $unique) {
+        $exe = $entry[0]
+        $args = @()
+        if ($entry.Count -gt 1) {
+            $args = $entry[1..($entry.Count - 1)]
+        }
+
+        $testArgs = $args + @("-c", $minimum)
+        try {
+            & $exe @($testArgs)
+            $returnValue = @($exe) + $args
+            if (($entry -join ' ') -ne $preferredKey) {
+                Write-Host "Python launcher 'py -3' unavailable; using '$($entry -join ' ')'." -ForegroundColor Yellow
+            }
+            return $returnValue
+        } catch {
+            continue
+        }
+    }
+
+    $attempted = ($unique | ForEach-Object { "'" + ($_ -join ' ') + "'" }) -join ', '
+    Write-Error "Python 3.9+ not found. Tried: $attempted. Install a supported version from https://python.org/downloads" -ErrorAction Stop
+}
+
+function Get-RuntimeOption {
+    param([string]$Choice)
+
+    switch ($Choice) {
+        "2" { return @{ Choice = 2; Label = "CUDA 12.1  (recent NVIDIA, driver >= 535)"; Suffix = "cu121"; Index = "https://download.pytorch.org/whl/cu121" } }
+        "3" { return @{ Choice = 3; Label = "CPU only   (no NVIDIA GPU)"; Suffix = "cpu"; Index = "https://download.pytorch.org/whl/cpu" } }
+        default { return @{ Choice = 1; Label = "CUDA 11.8  (legacy NVIDIA, driver >= 520)"; Suffix = "cu118"; Index = "https://download.pytorch.org/whl/cu118" } }
     }
 }
 
+function Detect-TorchRuntime {
+    $detectedChoice = "3"
+    $reason = "No NVIDIA GPU detected; defaulting to CPU wheel."
+    $gpuName = $null
+    $driver = $null
+
+    try {
+        $controllers = Get-CimInstance Win32_VideoController -ErrorAction Stop
+    } catch {
+        $controllers = @()
+    }
+
+    $nvidia = $controllers | Where-Object { $_.Name -like "*NVIDIA*" }
+
+    if ($nvidia -and $nvidia.Count -gt 0) {
+        $gpuName = $nvidia[0].Name
+        try {
+            $smi = Get-Command "nvidia-smi.exe" -ErrorAction Stop
+            $driver = (& $smi "--query-gpu=driver_version" "--format=csv,noheader" 2>$null | Select-Object -First 1)
+        } catch {
+            if ($nvidia[0].DriverVersion) {
+                $driver = $nvidia[0].DriverVersion
+            }
+        }
+
+        $driverMajor = $null
+        if ($driver -and ($driver -match "(\d{3})")) {
+            $driverMajor = [int]$matches[1]
+        }
+
+        if ($driverMajor -and $driverMajor -ge 535) {
+            $detectedChoice = "2"
+            $reason = "Detected NVIDIA driver $driverMajor (>= 535); selecting CUDA 12.1 wheel."
+        } else {
+            $detectedChoice = "1"
+            if ($driverMajor) {
+                $reason = "Detected NVIDIA driver $driverMajor (< 535); selecting CUDA 11.8 wheel."
+            } else {
+                $reason = "Detected NVIDIA GPU; selecting CUDA 11.8 wheel."
+            }
+        }
+    }
+
+    $runtime = Get-RuntimeOption -Choice $detectedChoice
+    $runtime.Reason = $reason
+    if ($gpuName) { $runtime.GPUName = $gpuName }
+    if ($driver) { $runtime.DriverVersion = $driver.Trim() }
+    return $runtime
+}
+
 function Prompt-TorchRuntime {
+    param($Detected)
+
     Write-Host "Select the PyTorch runtime for your GPU:" -ForegroundColor Cyan
     Write-Host "  [1] CUDA 11.8  (legacy NVIDIA, driver >= 520)"
     Write-Host "  [2] CUDA 12.1  (recent NVIDIA, driver >= 535)"
     Write-Host "  [3] CPU only   (no NVIDIA GPU)"
-    $choice = Read-Host "Enter choice [1-3] (default 1)"
-    switch ($choice) {
-        "2" { return @{ Suffix = "cu121"; Index = "https://download.pytorch.org/whl/cu121" } }
-        "3" { return @{ Suffix = "cpu"; Index = "https://download.pytorch.org/whl/cpu" } }
-        default { return @{ Suffix = "cu118"; Index = "https://download.pytorch.org/whl/cu118" } }
+
+    $defaultChoice = "1"
+    if ($Detected) {
+        $defaultChoice = [string]$Detected.Choice
+        if ($Detected.GPUName) {
+            $gpuInfo = "Detected GPU: $($Detected.GPUName)"
+            if ($Detected.DriverVersion) { $gpuInfo += " (driver $($Detected.DriverVersion))" }
+            Write-Host $gpuInfo -ForegroundColor Cyan
+        }
+        if ($Detected.Reason) {
+            Write-Host $Detected.Reason -ForegroundColor DarkCyan
+        }
+    }
+
+    while ($true) {
+        $choice = Read-Host "Enter choice [1-3] (default $defaultChoice)"
+        if ([string]::IsNullOrWhiteSpace($choice)) {
+            $choice = $defaultChoice
+        }
+        switch ($choice) {
+            "1" { return Get-RuntimeOption -Choice "1" }
+            "2" { return Get-RuntimeOption -Choice "2" }
+            "3" { return Get-RuntimeOption -Choice "3" }
+            default { Write-Host "Please enter 1, 2, or 3." -ForegroundColor Yellow }
+        }
     }
 }
 
@@ -101,7 +226,16 @@ Write-Host " PolyVox Studio Windows Installer" -ForegroundColor Cyan
 Write-Host "==========================================="
 
 $pyCmd = Ensure-Python -Executable $Python
-$runtime = Prompt-TorchRuntime
+$detectedRuntime = Detect-TorchRuntime
+if ($AutoTorch) {
+    Write-Host "Auto-selecting PyTorch runtime: $($detectedRuntime.Label)" -ForegroundColor Cyan
+    if ($detectedRuntime.Reason) {
+        Write-Host $detectedRuntime.Reason -ForegroundColor DarkCyan
+    }
+    $runtime = $detectedRuntime
+} else {
+    $runtime = Prompt-TorchRuntime -Detected $detectedRuntime
+}
 New-Venv -PyCmd $pyCmd
 Invoke-InEnv "pip" @("install", "--upgrade", "pip", "setuptools", "wheel")
 Install-Torch -Runtime $runtime
