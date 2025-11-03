@@ -175,7 +175,7 @@ function Prompt-TorchRuntime {
 }
 
 function New-Venv {
-    param([string[]]$PyCmd)
+    param($PyCmd)
     if (Test-Path $envDir) {
         $answer = Read-Host "Existing environment detected at $envDir. Recreate? [y/N]"
         if ($answer -match '^[Yy]$') {
@@ -185,7 +185,26 @@ function New-Venv {
             return
         }
     }
-    & $PyCmd "-m" "venv" $envDir
+
+    $parts = @()
+    if ($PyCmd -is [System.Array]) {
+        $parts = @($PyCmd)
+    } elseif ($PyCmd) {
+        $parts = @($PyCmd)
+    }
+
+    if (-not $parts -or -not $parts[0]) {
+        Write-Error "Python command not resolved. Install Python 3.9+ from https://python.org/downloads" -ErrorAction Stop
+    }
+
+    $exe = $parts[0]
+    $args = @()
+    if ($parts.Count -gt 1) {
+        $args = $parts[1..($parts.Count - 1)]
+    }
+
+    $venvArgs = $args + @("-m", "venv", $envDir)
+    & $exe @($venvArgs)
 }
 
 function Invoke-InEnv {
