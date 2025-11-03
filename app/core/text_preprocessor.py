@@ -464,11 +464,11 @@ class TextPreprocessor:
         Returns:
             Cleaned and optimized text ready for TTS
         """
-        # Step 1: Normalize unicode
-        text = self.normalize_unicode(text)
-
-        # Step 2: Normalize quotes
+        # Step 1: Normalize quotes first so curly apostrophes survive ASCII cleanup
         text = self.normalize_quotes(text)
+
+        # Step 2: Normalize unicode
+        text = self.normalize_unicode(text)
 
         # Step 2.5: Remove spaces around hyphens in compound words (e.g., "wool - lined" → "wool lined")
         text = re.sub(r'\s+-\s+', ' ', text)

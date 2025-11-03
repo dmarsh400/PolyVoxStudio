@@ -3,6 +3,7 @@ Audio Post-Processing for Professional Quality
 Enhances XTTS v2 output for natural, broadcast-quality sound
 """
 
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -346,8 +347,6 @@ class AudioPostProcessor:
             
             if input_path == output_path:
                 # In-place enhancement: use temp file
-                import tempfile
-                import os
                 with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
                     temp_path = tmp.name
                 try:
