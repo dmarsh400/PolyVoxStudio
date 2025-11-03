@@ -5,7 +5,7 @@
     Creates a virtual environment named "PolyVox", installs an appropriate
     PyTorch wheel for the selected GPU runtime (including legacy CUDA 11.8),
     and fetches the remaining Python dependencies.
-!>
+#>
 
 param(
     [string]$Python = "py"
