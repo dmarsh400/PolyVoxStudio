@@ -1,7 +1,433 @@
 import os
 import json
+import tkinter as tk
+import tkinter.font as tkfont
 import customtkinter as ctk
 from tkinter import messagebox, ttk
+
+
+class ScrollableDropdown(ctk.CTkFrame):
+    """Dropdown widget with a scrollable popup that fits long option labels."""
+
+    def __init__(self, master, values, command=None, width=240, button_height=30, max_width=520, max_height=320, **kwargs):
+        super().__init__(master, **kwargs)
+        self._values = list(values) if values else []
+        self._command = command
+        self._base_width = width
+        self._max_width = max_width
+        self._max_height = max_height
+        self._button_height = button_height
+        self._selection = ""
+
+        self._debug_enabled = os.environ.get("POLYVOX_DEBUG_DROPDOWN") == "1"
+        self._dropdown_window = None
+        self._list_frame = None
+        self._root_click_binding = None
+        self._root_config_binding = None
+        self._padding = 4
+        self._popup_width = self._base_width
+
+        self._display_btn = ctk.CTkButton(
+            self,
+            text="",
+            anchor="w",
+            width=self._base_width,
+            height=self._button_height,
+            fg_color=None,
+            text_color=None,
+            border_width=1,
+            command=self._toggle_dropdown,
+        )
+        self._display_btn.pack(fill="x", expand=True)
+
+        placeholder = self._values[0] if self._values else "(no options)"
+        self.set(placeholder)
+        self._ensure_width()
+
+        self.bind("<Destroy>", self._handle_destroy)
+
+    def set(self, value):
+        self._selection = value or ""
+        self._display_btn.configure(text=self._selection if self._selection else "(no options)")
+        self._ensure_width()
+
+    def get(self):
+        return self._selection
+
+    def configure(self, **kwargs):  # type: ignore[override]
+        if "values" in kwargs:
+            self._values = list(kwargs.pop("values"))
+            if self._selection not in self._values and self._values:
+                self.set(self._values[0])
+            if self._dropdown_window is not None:
+                self._rebuild_dropdown()
+            self._ensure_width()
+        if "command" in kwargs:
+            self._command = kwargs.pop("command")
+        if "width" in kwargs:
+            self._base_width = kwargs.pop("width")
+            self._ensure_width()
+        if "max_width" in kwargs:
+            self._max_width = kwargs.pop("max_width")
+            self._ensure_width()
+        super().configure(**kwargs)
+
+    def _toggle_dropdown(self):
+        if self._dropdown_window is None:
+            self._open_dropdown()
+        else:
+            self._close_dropdown()
+
+    def _open_dropdown(self):
+        if not self._values:
+            return
+
+        if self._dropdown_window is not None:
+            self._close_dropdown()
+
+        self.update_idletasks()
+
+        root = self.winfo_toplevel()
+        popup_width = self._popup_width
+        height = self._get_dropdown_height()
+        width = popup_width + 6
+        padding = self._padding
+        window_width = width + padding * 2
+        window_height = height + padding * 2
+
+        dropdown = ctk.CTkToplevel(root)
+        dropdown.withdraw()
+        dropdown.overrideredirect(True)
+        dropdown.transient(root)
+        dropdown.attributes("-topmost", True)
+
+        self._debug(
+            "open",
+            {
+                "popup_width": popup_width,
+                "width": width,
+                "height": height,
+                "window_width": window_width,
+                "window_height": window_height,
+            },
+        )
+
+        popup_bg = ctk.ThemeManager.theme.get("CTk", {}).get("fg_color", "system")
+        try:
+            dropdown.configure(fg_color=popup_bg)
+        except tk.TclError:
+            pass
+
+        outer_frame = ctk.CTkFrame(
+            dropdown,
+            corner_radius=8,
+            fg_color=ctk.ThemeManager.theme["CTkFrame"]["fg_color"],
+        )
+        outer_frame.pack(fill="both", expand=True, padx=padding, pady=padding)
+
+        self._list_frame = ctk.CTkScrollableFrame(
+            outer_frame,
+            width=width,
+            height=height,
+            corner_radius=0,
+            fg_color="transparent",
+        )
+        self._list_frame.pack(fill="both", expand=True)
+
+        self._populate_dropdown_buttons()
+
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self._list_frame.bind(sequence, self._on_mousewheel, add="+")
+
+        self._dropdown_window = dropdown
+        self._bind_root_events(root)
+        self._reposition_dropdown(window_width, window_height)
+
+        try:
+            dropdown.deiconify()
+            dropdown.lift()
+            dropdown.after_idle(lambda: self._reposition_dropdown(window_width, window_height))
+            dropdown.after(20, self._focus_dropdown)
+        except tk.TclError:
+            self._close_dropdown()
+            return
+
+        dropdown.bind("<FocusOut>", lambda _event: self._close_dropdown())
+
+        dropdown.after(40, self._log_actual_geometry)
+
+    def _populate_dropdown_buttons(self):
+        if self._list_frame is None:
+            return
+
+        container = getattr(self._list_frame, "scrollable_frame", self._list_frame)
+
+        for child in container.winfo_children():
+            child.destroy()
+
+        active_value = self._selection
+        popup_width = self._popup_width
+        for value in self._values:
+            is_active = value == active_value
+            btn = ctk.CTkButton(
+                container,
+                text=value,
+                anchor="w",
+                width=popup_width,
+                height=self._button_height,
+                fg_color=("#3a3a3a" if is_active else "transparent"),
+                hover_color=("#4c4c4c" if is_active else ctk.ThemeManager.theme["CTkButton"]["hover_color"]),
+                text_color=None,
+                command=lambda v=value: self._on_select(v),
+            )
+            btn.pack(fill="x", padx=4, pady=2)
+            for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                btn.bind(sequence, self._on_mousewheel, add="+")
+
+    def _rebuild_dropdown(self):
+        if self._dropdown_window is None:
+            return
+        self._populate_dropdown_buttons()
+        self._reposition_dropdown()
+
+    def _on_select(self, value):
+        self.set(value)
+        if self._command is not None:
+            self._command(value)
+        self._close_dropdown()
+
+    def _close_dropdown(self):
+        if self._dropdown_window is not None:
+            self._debug("close")
+            try:
+                self._dropdown_window.destroy()
+            except tk.TclError:
+                pass
+            self._dropdown_window = None
+            self._list_frame = None
+            self._unbind_root_events()
+
+    def _handle_destroy(self, event):
+        if event.widget is self:
+            self._close_dropdown()
+
+    def _ensure_width(self):
+        target = max(self._base_width, self._compute_required_width())
+        target = min(target, self._max_width)
+        changed = target != getattr(self, "_popup_width", None)
+        self._popup_width = target
+        self._display_btn.configure(width=target)
+        if changed:
+            self._reposition_dropdown()
+        self._debug(
+            "ensure_width",
+            {
+                "base_width": self._base_width,
+                "computed_width": self._compute_required_width(),
+                "popup_width": self._popup_width,
+                "max_width": self._max_width,
+            },
+        )
+
+    def _compute_required_width(self):
+        if not self._values:
+            return self._base_width
+        try:
+            font = tkfont.Font(font=self._display_btn.cget("font"))
+            text_px = max(font.measure(v) for v in self._values)
+        except tk.TclError:
+            text_px = max(len(v) for v in self._values) * 8
+        return text_px + 48
+
+    def _get_dropdown_height(self):
+        if not self._values:
+            return min(120, self._max_height)
+        content_height = len(self._values) * (self._button_height + 4)
+        return min(self._max_height, max(120, content_height))
+
+    def _on_mousewheel(self, event):
+        if self._list_frame is None:
+            return
+        canvas = getattr(self._list_frame, "_parent_canvas", None)
+        if canvas is None:
+            return
+        try:
+            if event.num == 4 or event.delta > 0:
+                canvas.yview_scroll(-1, "units")
+            elif event.num == 5 or event.delta < 0:
+                canvas.yview_scroll(1, "units")
+        except tk.TclError:
+            pass
+
+    def _focus_dropdown(self):
+        if self._dropdown_window is None:
+            return
+        try:
+            self._dropdown_window.focus_force()
+        except tk.TclError:
+            pass
+
+    def _reposition_dropdown(self, window_width=None, window_height=None):
+        if self._dropdown_window is None:
+            return
+        popup_width = self._popup_width
+        width = popup_width + 6
+        height = self._get_dropdown_height()
+        padding = self._padding
+        win_width = window_width if window_width is not None else width + padding * 2
+        win_height = window_height if window_height is not None else height + padding * 2
+        pos_x, pos_y = self._calculate_anchor_position(win_width, win_height)
+        self._debug(
+            "reposition",
+            {
+                "popup_width": popup_width,
+                "height": height,
+                "window_width": win_width,
+                "window_height": win_height,
+                "pos_x": pos_x,
+                "pos_y": pos_y,
+            },
+        )
+        try:
+            self._dropdown_window.geometry(f"{win_width}x{win_height}+{pos_x}+{pos_y}")
+        except tk.TclError:
+            return
+        if self._list_frame is not None:
+            try:
+                self._list_frame.configure(width=width, height=height)
+                container = getattr(self._list_frame, "scrollable_frame", self._list_frame)
+                for child in container.winfo_children():
+                    if isinstance(child, ctk.CTkButton):
+                        child.configure(width=self._popup_width)
+            except tk.TclError:
+                pass
+
+    def _calculate_anchor_position(self, window_width, window_height):
+        try:
+            root = self.winfo_toplevel()
+        except tk.TclError:
+            return 0, 0
+
+        try:
+            root.update_idletasks()
+            self.update_idletasks()
+            self._display_btn.update_idletasks()
+        except tk.TclError:
+            return 0, 0
+
+        try:
+            btn_root_x = self._display_btn.winfo_rootx()
+            btn_root_y = self._display_btn.winfo_rooty()
+            btn_height = self._display_btn.winfo_height()
+            screen_width = root.winfo_screenwidth()
+            screen_height = root.winfo_screenheight()
+            root_x = root.winfo_rootx()
+            root_y = root.winfo_rooty()
+            root_width = root.winfo_width()
+            root_height = root.winfo_height()
+
+            abs_x = btn_root_x
+            abs_y = btn_root_y + btn_height + 2
+
+            if abs_x + window_width > screen_width - 4:
+                abs_x = max(4, screen_width - window_width - 4)
+
+            if abs_y + window_height > screen_height - 4:
+                above_y = btn_root_y - window_height - 2
+                if above_y >= 4:
+                    abs_y = above_y
+                else:
+                    abs_y = max(4, screen_height - window_height - 4)
+
+            self._debug(
+                "anchor",
+                {
+                    "btn_root_x": btn_root_x,
+                    "btn_root_y": btn_root_y,
+                    "btn_height": btn_height,
+                    "root_x": root_x,
+                    "root_y": root_y,
+                    "root_width": root_width,
+                    "root_height": root_height,
+                    "screen_width": screen_width,
+                    "screen_height": screen_height,
+                    "window_width": window_width,
+                    "window_height": window_height,
+                    "abs_x": abs_x,
+                    "abs_y": abs_y,
+                },
+            )
+            return int(abs_x), int(abs_y)
+        except tk.TclError:
+            return 0, 0
+
+    def _bind_root_events(self, root):
+        self._unbind_root_events()
+
+        def _on_root_click(event):
+            if self._dropdown_window is None:
+                return
+            try:
+                x1 = self._dropdown_window.winfo_rootx()
+                y1 = self._dropdown_window.winfo_rooty()
+                x2 = x1 + self._dropdown_window.winfo_width()
+                y2 = y1 + self._dropdown_window.winfo_height()
+                if not (x1 <= event.x_root <= x2 and y1 <= event.y_root <= y2):
+                    self._close_dropdown()
+            except tk.TclError:
+                self._close_dropdown()
+
+        def _on_root_configure(_event):
+            self._reposition_dropdown()
+
+        self._root_click_binding = root.bind("<Button-1>", _on_root_click, add="+")
+        self._root_config_binding = root.bind("<Configure>", _on_root_configure, add="+")
+
+    def _unbind_root_events(self):
+        try:
+            root = self.winfo_toplevel()
+        except tk.TclError:
+            root = None
+
+        if root is not None:
+            if self._root_click_binding is not None:
+                try:
+                    root.unbind("<Button-1>", self._root_click_binding)
+                except tk.TclError:
+                    pass
+                self._root_click_binding = None
+            if self._root_config_binding is not None:
+                try:
+                    root.unbind("<Configure>", self._root_config_binding)
+                except tk.TclError:
+                    pass
+                self._root_config_binding = None
+
+    def _log_actual_geometry(self):
+        if self._dropdown_window is None or not self._debug_enabled:
+            return
+        try:
+            self._debug(
+                "actual_geometry",
+                {
+                    "x": self._dropdown_window.winfo_rootx(),
+                    "y": self._dropdown_window.winfo_rooty(),
+                    "width": self._dropdown_window.winfo_width(),
+                    "height": self._dropdown_window.winfo_height(),
+                },
+            )
+        except tk.TclError:
+            pass
+
+    def _debug(self, label, payload=None):
+        if not self._debug_enabled:
+            return
+        identifier = f"id={self.winfo_id()}" if self.winfo_exists() else "id=<destroyed>"
+        if payload is not None:
+            print(f"[ScrollableDropdown:{label}] {identifier} {payload}")
+        else:
+            print(f"[ScrollableDropdown:{label}] {identifier}")
+
 
 
 class VoicesTab(ctk.CTkFrame):
@@ -298,13 +724,14 @@ class VoicesTab(ctk.CTkFrame):
                 self._save_selections()
                 self._log(f"[VoicesTab] Assigned default voice {actual_selection} to {char}")
 
-            menu = ctk.CTkOptionMenu(
+            dropdown = ScrollableDropdown(
                 frame,
                 values=all_options,
                 command=lambda choice, c=char, vlm=voice_label_map: self._set_voice_with_map(c, choice, vlm),
+                width=260,
             )
-            menu.set(display_selection)
-            menu.pack(side="left", padx=5)
+            dropdown.set(display_selection)
+            dropdown.pack(side="left", padx=5, fill="x", expand=True)
     
     def _set_voice_with_map(self, character, display_choice, voice_label_map):
         """Set voice selection, converting from display label to actual label"""

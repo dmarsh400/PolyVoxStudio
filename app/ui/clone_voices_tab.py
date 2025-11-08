@@ -3,7 +3,8 @@ import json
 import tkinter as tk
 import customtkinter as ctk
 from tkinter import filedialog, messagebox, simpledialog
-import shutil
+
+from pydub import AudioSegment
 
 VOICES_DIR = "voices/references"
 VOICES_FILE = "voices_complete_xtts.json"
@@ -233,17 +234,29 @@ class CloneVoicesTab(ctk.CTkFrame):
         
         # For XTTS, we need a WAV reference file, not a Bark history prompt
         # Copy the uploaded audio to the voices/references directory
-        import shutil
         voice_ref_path = os.path.join(VOICES_DIR, f"{safe_name}.wav")
 
         try:
             self.log(f"Processing audio file: {os.path.basename(audio_path)}")
-            self.log(f"Copying voice reference for '{voice_name}'...")
+            self.log(f"Preparing voice reference for '{voice_name}'...")
             self.update_idletasks()
 
-            # Copy the audio file to references directory
-            shutil.copy2(audio_path, voice_ref_path)
-            self.log(f"Voice reference saved to: {voice_ref_path}")
+            # Load and normalize the audio so XTTS always gets a clean WAV sample
+            try:
+                segment = AudioSegment.from_file(audio_path)
+            except Exception as exc:
+                messagebox.showerror(
+                    "Invalid Audio",
+                    "Could not read the selected audio file. Please provide a valid WAV/MP3/FLAC clip.\n\n"
+                    f"Details: {exc}"
+                )
+                self.log(f"❌ Failed to load audio: {exc}")
+                return
+
+            # Ensure mono, consistent samplerate for better cloning results
+            segment = segment.set_channels(1).set_frame_rate(24000)
+            segment.export(voice_ref_path, format="wav")
+            self.log(f"Voice reference converted to WAV: {voice_ref_path}")
 
             # Load existing voices
             if not os.path.exists(VOICES_FILE):
