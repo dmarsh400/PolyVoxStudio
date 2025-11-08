@@ -247,11 +247,9 @@ class AudioPostProcessor:
             'equalizer=f=4000:width_type=h:width=1000:g=2',
             
             # 4. Subtle reverb for natural room tone
-            'aecho=0.8:0.9:40:0.15',
+            'aecho=0.8:0.9:40:0.15'
             
-            # 5. Remove silence from start/end
-            'silenceremove=start_periods=1:start_silence=0.1:start_threshold=0.02:'
-            'stop_periods=1:stop_silence=0.1:stop_threshold=0.02',
+            # Silence trimming disabled to preserve full-length narration
         ]
         
         cmd = [

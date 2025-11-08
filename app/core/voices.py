@@ -7,6 +7,7 @@ from app.core.audio_postprocessor import AudioPostProcessor
 import soundfile as sf
 import numpy as np
 from pathlib import Path
+from typing import Any, Dict
 
 # --- Accent control (removed for simplicity) ---
 
@@ -40,11 +41,111 @@ _tts_model = None
 _preprocessor = None
 _postprocessor = None
 
+_SAMPLING_PROFILE = os.getenv("POLYVOX_XTTS_SAMPLING", "stable").strip().lower() or "stable"
+
+_SAMPLING_PRESETS = {
+    "stable": {
+        "temperature": 0.2,
+        "top_p": 0.65,
+        "top_k": 30,
+        "repetition_penalty": 8.0,
+        "do_sample": True,
+        "num_beams": 1,
+        "length_penalty": 1.0,
+    },
+    "expressive": {
+        "temperature": 0.75,
+        "top_p": 0.9,
+        "top_k": 50,
+        "repetition_penalty": 5.0,
+        "do_sample": True,
+        "num_beams": 1,
+    },
+}
+
+_ACTIVE_SAMPLING_PROFILE = _SAMPLING_PROFILE if _SAMPLING_PROFILE in _SAMPLING_PRESETS else "stable"
+_SAMPLING_CONFIG = _SAMPLING_PRESETS[_ACTIVE_SAMPLING_PROFILE]
+
+
+def _patch_xtts_generation():
+    """Monkey patch XTTS GPT inference to support newer transformers."""
+    try:
+        from TTS.tts.layers.xtts.gpt_inference import GPT2InferenceModel
+    except ImportError:
+        return
+
+    prepare_fn = getattr(GPT2InferenceModel, "prepare_inputs_for_generation", None)
+    code_obj = getattr(prepare_fn, "__code__", None)
+    if not code_obj:
+        return
+
+    # Detect the stub that only raises NotImplementedError
+    if not any(
+        isinstance(const, str) and "prepare_inputs_for_generation" in const and ".generate()" in const
+        for const in code_obj.co_consts
+    ):
+        return
+
+    def _patched_prepare_inputs(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        token_type_ids = kwargs.get("token_type_ids")
+
+        if past_key_values:
+            past_length = past_key_values[0][0].shape[2]
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                remove_prefix_length = max(input_ids.shape[1] - 1, 0)
+
+            input_ids = input_ids[:, remove_prefix_length:]
+
+            if token_type_ids is not None and token_type_ids.shape[1] != input_ids.shape[1]:
+                token_type_ids = token_type_ids[:, -input_ids.shape[1]:]
+
+        attention_mask = kwargs.get("attention_mask")
+        position_ids = kwargs.get("position_ids")
+
+        if attention_mask is not None and position_ids is None:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1]:]
+        else:
+            position_ids = None
+
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+            }
+        )
+
+        return model_inputs
+
+    GPT2InferenceModel.prepare_inputs_for_generation = _patched_prepare_inputs
+
 def get_tts_model():
     """Lazy load and return the XTTS model."""
     global _tts_model
     if _tts_model is None:
+        _patch_xtts_generation()
         print("[voices.py] Loading XTTS v2 model...")
+        if _SAMPLING_PROFILE not in _SAMPLING_PRESETS:
+            print(f"[voices.py] Unknown sampling profile '{_SAMPLING_PROFILE}', falling back to 'stable'.")
+        print(f"[voices.py] Using XTTS sampling profile '{_ACTIVE_SAMPLING_PROFILE}'.")
         _tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
         # Move to CUDA if available
         if torch.cuda.is_available():
@@ -135,9 +236,7 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
                 file_path=str(tmp_wav),
                 speaker_wav=speaker_wav,
                 language=language,
-                temperature=0.8,
-                top_p=0.95,
-                top_k=50
+                **_SAMPLING_CONFIG,
             )
             if os.path.exists(str(tmp_wav)):
                 audio_check, _ = sf.read(str(tmp_wav))
