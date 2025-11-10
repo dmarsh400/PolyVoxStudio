@@ -594,13 +594,17 @@ class VoicesTab(ctk.CTkFrame):
             right_panel, text="Refresh Characters", command=self.refresh_characters
         ).pack(fill="x", padx=10, pady=5)
 
-        self.assign_frame = ctk.CTkFrame(right_panel)
-        self.assign_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.assign_scroll = ctk.CTkScrollableFrame(right_panel)
+        self.assign_scroll.pack(fill="both", expand=True, padx=10, pady=(10, 0))
 
-        ctk.CTkButton(
-            right_panel, text="Send to Audio Processing", command=self.send_to_audio_processing,
-            fg_color="green", hover_color="darkgreen"
-        ).pack(fill="x", padx=10, pady=10)
+        self.send_button = ctk.CTkButton(
+            right_panel,
+            text="Send to Audio Processing",
+            command=self.send_to_audio_processing,
+            fg_color="green",
+            hover_color="darkgreen",
+        )
+        self.send_button.pack(fill="x", padx=10, pady=10, side="bottom")
         
         # Initial population
         self._refresh_voice_list()
@@ -669,11 +673,16 @@ class VoicesTab(ctk.CTkFrame):
         if "Narrator" in characters and "Narrator" not in self.voice_selections and self.voices:
             self.voice_selections["Narrator"] = self.voices[0]["label"]
 
-        for widget in self.assign_frame.winfo_children():
+        if not hasattr(self, "assign_scroll") or self.assign_scroll is None:
+            return
+
+        container = getattr(self.assign_scroll, "scrollable_frame", self.assign_scroll)
+
+        for widget in container.winfo_children():
             widget.destroy()
 
         if not characters:
-            ctk.CTkLabel(self.assign_frame, text="No characters detected.").pack(pady=10)
+            ctk.CTkLabel(container, text="No characters detected.").pack(pady=10)
             return
 
         # Build voice options with metadata for better identification
@@ -704,7 +713,7 @@ class VoicesTab(ctk.CTkFrame):
         default_voice = all_options[0]
 
         for char in characters:
-            frame = ctk.CTkFrame(self.assign_frame)
+            frame = ctk.CTkFrame(container)
             frame.pack(fill="x", pady=2)
             ctk.CTkLabel(frame, text=char, width=120, anchor="w").pack(side="left", padx=5)
 

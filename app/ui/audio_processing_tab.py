@@ -645,7 +645,7 @@ class AudioProcessingTab(ctk.CTkFrame):
                         
                         try:
                             # Synthesize audio
-                            synthesize_text(voice_entry, text, out_path)
+                            synthesize_text(voice_entry, text, out_path, speaker_name=speaker)
                             
                             # Validate quality if enabled
                             if self.quality_check_enabled:
