@@ -6,6 +6,7 @@ from app.core.text_preprocessor import TextPreprocessor
 from app.core.audio_postprocessor import AudioPostProcessor
 import soundfile as sf
 import numpy as np
+import librosa
 from pathlib import Path
 from typing import Any, Dict
 
@@ -41,30 +42,69 @@ _tts_model = None
 _preprocessor = None
 _postprocessor = None
 
-_SAMPLING_PROFILE = os.getenv("POLYVOX_XTTS_SAMPLING", "stable").strip().lower() or "stable"
 
-_SAMPLING_PRESETS = {
-    "stable": {
-        "temperature": 0.2,
-        "top_p": 0.65,
-        "top_k": 30,
-        "repetition_penalty": 8.0,
-        "do_sample": True,
+# --- XTTS Generation Presets (anchor: XTTS_PRESETS) ---
+XTTS_GENERATION_PRESETS = {
+    "stable_no_sample": {
+        "do_sample": False,
         "num_beams": 1,
+        "temperature": 0.1,
+        "top_p": 1.0,
+        "top_k": 0,
+        "repetition_penalty": 2.0,
         "length_penalty": 1.0,
     },
     "expressive": {
-        "temperature": 0.75,
-        "top_p": 0.9,
-        "top_k": 50,
-        "repetition_penalty": 5.0,
         "do_sample": True,
         "num_beams": 1,
+        "temperature": 0.7,
+        "top_p": 0.85,
+        "top_k": 50,
+        "repetition_penalty": 2.0,
+        "length_penalty": 1.0,
     },
 }
 
-_ACTIVE_SAMPLING_PROFILE = _SAMPLING_PROFILE if _SAMPLING_PROFILE in _SAMPLING_PRESETS else "stable"
-_SAMPLING_CONFIG = _SAMPLING_PRESETS[_ACTIVE_SAMPLING_PROFILE]
+# Map character/speaker names to presets
+SPEAKER_PRESET_MAP = {
+    "Narrator": "stable_no_sample",
+}
+
+
+def _get_generation_kwargs(speaker_name: str | None, fallback: str = "expressive") -> tuple[str, Dict[str, Any]]:
+    """Resolve the XTTS generation preset for the given speaker."""
+    preset_name = SPEAKER_PRESET_MAP.get((speaker_name or "").strip(), fallback)
+    preset = XTTS_GENERATION_PRESETS.get(preset_name)
+    if preset is None:
+        preset_name = "stable_no_sample"
+        preset = XTTS_GENERATION_PRESETS[preset_name]
+    # Return a copy so downstream code can tweak without mutating the preset
+    preset_copy = dict(preset)
+    if not preset_copy.get("do_sample", True):
+        preset_copy["temperature"] = None
+        preset_copy["top_p"] = None
+        preset_copy["top_k"] = None
+    return preset_name, preset_copy
+
+
+# --- Crossfade Utility (anchor: SAFE_CROSSFADE) ---
+def apply_linear_crossfade(prev: np.ndarray, next_: np.ndarray, sr: int, fade_ms: int = 100) -> np.ndarray:
+    """Concatenate two clips with a linear crossfade to avoid comb-filter buzz."""
+    if prev.size == 0:
+        return next_.copy()
+    if next_.size == 0:
+        return prev.copy()
+
+    fade = max(1, int(sr * (fade_ms / 1000.0)))
+    if prev.size < fade or next_.size < fade:
+        fade = max(1, min(prev.size, next_.size, fade))
+
+    fade_out = np.linspace(1.0, 0.0, fade, dtype=prev.dtype)
+    fade_in = np.linspace(0.0, 1.0, fade, dtype=next_.dtype)
+
+    cross = prev[-fade:] * fade_out + next_[:fade] * fade_in
+    glued = np.concatenate([prev[:-fade], cross, next_[fade:]])
+    return glued
 
 
 def _patch_xtts_generation():
@@ -143,9 +183,6 @@ def get_tts_model():
     if _tts_model is None:
         _patch_xtts_generation()
         print("[voices.py] Loading XTTS v2 model...")
-        if _SAMPLING_PROFILE not in _SAMPLING_PRESETS:
-            print(f"[voices.py] Unknown sampling profile '{_SAMPLING_PROFILE}', falling back to 'stable'.")
-        print(f"[voices.py] Using XTTS sampling profile '{_ACTIVE_SAMPLING_PROFILE}'.")
         _tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
         # Move to CUDA if available
         if torch.cuda.is_available():
@@ -169,7 +206,7 @@ def get_postprocessor():
         _postprocessor = AudioPostProcessor()
     return _postprocessor
 
-def synthesize_text(voice_entry, text, out_path, job_idx=0):
+def synthesize_text(voice_entry, text, out_path, job_idx=0, speaker_name=None):
     """
     Generate speech audio from text using XTTS v2.
     Auto-distributes jobs across available GPUs with automatic CPU fallback.
@@ -202,8 +239,13 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
         # Resolve language (simplified to English for natural synthesis)
         language = "en"
 
+        resolved_speaker = speaker_name or voice_entry.get("character") or voice_entry.get("label") or voice_entry.get("name") or Path(speaker_wav).stem
+        preset_name, preset_kwargs = _get_generation_kwargs(resolved_speaker)
+
         print(f"[voices.py] Synthesizing with XTTS on device={device_str} → {out_path}")
-        print(f"[voices.py] Using speaker: {os.path.basename(speaker_wav)}, language: {language}")
+        print(
+            f"[voices.py] Using speaker: {os.path.basename(speaker_wav)}, language: {language}, preset: {preset_name}"
+        )
         print(f"[voices.py] Segments: {len(segments)}")
 
         # 3) Synthesize each segment with its own style cue, then glue audio
@@ -215,13 +257,19 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
 
         post = get_postprocessor()
 
+        voice_language = (voice_entry.get("language") or language or "en").lower()
+        preserve_accents = voice_entry.get("preserve_accents")
+        if preserve_accents is None:
+            preserve_accents = not voice_language.startswith("en")
+        ascii_only = not preserve_accents
+
         for idx, seg in enumerate(segments):
             raw_seg = seg["text"]
             style = (seg.get("style") or "none").lower()
             
             # Clean + inject a small textual cue (engine may respond),
             # then rely on post-style shaping to guarantee an audible change.
-            cleaned = preprocessor.prepare_for_tts(raw_seg)
+            cleaned = preprocessor.prepare_for_tts(raw_seg, ascii_only=ascii_only)
             
             # Normalize text to prevent drift
             cleaned = normalize_for_tts(cleaned)
@@ -231,13 +279,14 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
 
             tmp_wav = tmp_dir / f"seg_{job_idx}_{idx}.wav"
             print(f"[voices.py] Synthesizing segment {idx}: '{cleaned}' (len={len(cleaned)})")
-            tts.tts_to_file(
-                text=text_to_synth,
-                file_path=str(tmp_wav),
-                speaker_wav=speaker_wav,
-                language=language,
-                **_SAMPLING_CONFIG,
-            )
+            tts_kwargs = {
+                "text": text_to_synth,
+                "file_path": str(tmp_wav),
+                "speaker_wav": speaker_wav,
+                "language": language,
+            }
+            tts_kwargs.update(preset_kwargs)
+            tts.tts_to_file(**tts_kwargs)
             if os.path.exists(str(tmp_wav)):
                 audio_check, _ = sf.read(str(tmp_wav))
                 print(f"[voices.py] Generated audio length: {len(audio_check)} samples")
@@ -247,6 +296,17 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
             audio, sr = sf.read(str(tmp_wav))
             if sr_used is None:
                 sr_used = sr
+            elif sr != sr_used:
+                try:
+                    orig_sr = sr
+                    audio = librosa.resample(audio, orig_sr=orig_sr, target_sr=sr_used)
+                    sr = sr_used
+                    print(
+                        f"[voices.py] Resampled segment {idx} from {orig_sr}Hz to {sr_used}Hz for consistency"
+                    )
+                except Exception as resample_err:
+                    print(f"[voices.py] Warning: resample failed ({resample_err}); using {sr}Hz for this segment")
+                    sr_used = sr
 
             # Add trailing silence to prevent end-of-sequence drift
             silence_duration = 0.2  # 200ms
@@ -260,36 +320,28 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0):
             audio = post.normalize_audio(audio)
             audio_parts.append(audio.astype(np.float32))
 
-        # 4) Concatenate with improved crossfade and micro-pauses for style changes
+        # 4) Concatenate with clean crossfades and optional style pauses
         if not audio_parts:
             raise RuntimeError("No audio generated.")
-        fade = int(0.1 * sr_used)  # 100 ms crossfade for smoother transitions
+
+        if sr_used is None:
+            sr_used = 24000
+
         glued = audio_parts[0]
-        prev_style = None
-        for part in audio_parts[1:]:
-            # Add micro-pause if style changed
-            current_style = segments[len(audio_parts) - len(audio_parts[1:]) - 1]['style']  # approximate
-            if prev_style and prev_style != current_style:
-                silence = np.zeros(int(0.05 * sr_used))  # 50ms pause
-                glued = np.concatenate([glued, silence])
+        prev_style = segments[0].get("style", "none") if segments else "none"
+
+        for idx_part, part in enumerate(audio_parts[1:], start=1):
+            current_style = segments[idx_part].get("style", "none") if idx_part < len(segments) else "none"
+
+            if prev_style and current_style and prev_style != current_style:
+                pause_samples = int(0.05 * sr_used)
+                if pause_samples > 0:
+                    glued = np.concatenate([glued, np.zeros(pause_samples, dtype=glued.dtype)])
+
+            glued = apply_linear_crossfade(glued, part, sr_used, fade_ms=100)
             prev_style = current_style
-            
-            if len(glued) >= fade and len(part) >= fade:
-                # Use proper Hann window crossfade to prevent artifacts
-                # Hann window: 0.5 * (1 - cos(2πt/T)) for smooth fade
-                t = np.linspace(0, 1, fade)
-                hann_fade_out = 0.5 * (1 - np.cos(2 * np.pi * t))  # Fade out: 1 → 0
-                hann_fade_in = 0.5 * (1 + np.cos(2 * np.pi * t))   # Fade in: 0 → 1
-                
-                # Apply crossfade
-                fade_out_section = glued[-fade:] * hann_fade_out
-                fade_in_section = part[:fade] * hann_fade_in
-                cross_section = fade_out_section + fade_in_section
-                
-                # Concatenate: [glued_without_fade] + [crossfaded_section] + [part_without_fade]
-                glued = np.concatenate([glued[:-fade], cross_section, part[fade:]])
-            else:
-                glued = np.concatenate([glued, part])
+
+        glued = glued.astype(np.float32, copy=False)
 
         # 5) Write and run your normal enhancement
         sf.write(out_path, glued, sr_used)

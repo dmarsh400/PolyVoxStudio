@@ -14,6 +14,37 @@ from scipy import signal
 import librosa
 
 
+# --- Config flags (anchor: AUDIO_POST_CONFIG) ---
+ENABLE_REVERB_BY_DEFAULT = False
+REVERB_FILTER = "aecho=0.7:0.6:25:0.2"
+
+
+def build_filter_chain(purpose: str = "narration", enable_reverb: bool | None = None) -> str:
+    """Build a safe default FFmpeg filter chain for narration/dialogue."""
+    if enable_reverb is None:
+        enable_reverb = ENABLE_REVERB_BY_DEFAULT
+
+    filters: list[str] = []
+
+    # 1) Clean up low-end rumble / DC offset
+    filters.append("highpass=f=80")
+
+    # 2) Light presence lift for clarity
+    filters.append("equalizer=f=3500:width_type=h:width=1500:g=1.5")
+
+    # 3) Moderate compression to tame peaks
+    filters.append("acompressor=threshold=-20dB:ratio=3:attack=200:release=1000")
+
+    # 4) Loudness normalization
+    filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
+
+    # 5) Optional reverb (disabled by default)
+    if enable_reverb:
+        filters.append(REVERB_FILTER)
+
+    return ",".join(filters)
+
+
 class AudioPostProcessor:
     """Backend audio enhancement for natural, professional sound"""
     
@@ -186,6 +217,13 @@ class AudioPostProcessor:
         end_idx = min(len(audio), non_silent_indices[-1] + tail_samples)
         
         return audio[start_idx:end_idx]
+
+    def apply_highpass(self, audio: np.ndarray, cutoff: float = 80.0, order: int = 2) -> np.ndarray:
+        """Apply a gentle high-pass filter to remove low-frequency rumble."""
+        if cutoff <= 0 or self.sample_rate <= 0:
+            return audio
+        sos = signal.butter(order, cutoff, btype="highpass", fs=self.sample_rate, output="sos")
+        return signal.sosfilt(sos, audio)
     
     def process_python(self, 
                       audio: np.ndarray,
@@ -202,26 +240,27 @@ class AudioPostProcessor:
         """
         # 1. Remove excessive silence
         audio = self.remove_silence_padding(audio)
-        
-        # 2. Normalize volume
-        audio = self.normalize_audio(audio)
-        
+
         if enhance:
+            # 2. Clean low-end rumble
+            audio = self.apply_highpass(audio)
+
             # 3. Gentle compression
             audio = self.apply_gentle_compression(audio)
-            
-            # 4. Enhance vocal presence
-            audio = self.enhance_vocal_presence(audio)
-            
-            # 5. Add subtle reverb
-            audio = self.add_subtle_reverb(audio)
-            
-            # 6. Final normalization
-            audio = self.normalize_audio(audio)
-        
+
+        # Final normalization
+        audio = self.normalize_audio(audio)
+
         return audio
     
-    def process_ffmpeg(self, input_path: str, output_path: str) -> str:
+    def process_ffmpeg(
+        self,
+        input_path: str,
+        output_path: str,
+        *,
+        purpose: str = "narration",
+        enable_reverb: bool | None = None,
+    ) -> str:
         """
         FFmpeg-based processing (faster, recommended)
         
@@ -236,26 +275,12 @@ class AudioPostProcessor:
             raise RuntimeError("FFmpeg not available")
         
         # Build filter chain
-        filters = [
-            # 1. Loudness normalization (EBU R128 standard)
-            'loudnorm=I=-16:TP=-1.5:LRA=11',
-            
-            # 2. Dynamic range compression
-            'acompressor=threshold=-20dB:ratio=3:attack=200:release=1000',
-            
-            # 3. Enhance vocal presence (3-5kHz boost)
-            'equalizer=f=4000:width_type=h:width=1000:g=2',
-            
-            # 4. Subtle reverb for natural room tone
-            'aecho=0.8:0.9:40:0.15'
-            
-            # Silence trimming disabled to preserve full-length narration
-        ]
+        filters = build_filter_chain(purpose=purpose, enable_reverb=enable_reverb)
         
         cmd = [
             'ffmpeg',
             '-i', input_path,
-            '-af', ','.join(filters),
+            '-af', filters,
             '-ar', str(self.sample_rate),
             '-y',  # Overwrite output
             output_path
@@ -273,11 +298,16 @@ class AudioPostProcessor:
         
         return output_path
     
-    def process(self, 
-               input_path: str,
-               output_path: str,
-               enhance: bool = True,
-               method: str = 'auto') -> Tuple[str, dict]:
+    def process(
+        self,
+        input_path: str,
+        output_path: str,
+        enhance: bool = True,
+        method: str = 'auto',
+        *,
+        enable_reverb: bool | None = None,
+        purpose: str = "narration",
+    ) -> Tuple[str, dict]:
         """
         Process audio file with optimal method
         
@@ -300,7 +330,12 @@ class AudioPostProcessor:
         
         # Process based on method
         if method == 'ffmpeg':
-            output_path = self.process_ffmpeg(input_path, output_path)
+            output_path = self.process_ffmpeg(
+                input_path,
+                output_path,
+                purpose=purpose,
+                enable_reverb=enable_reverb,
+            )
         else:
             # Python processing
             audio_out = self.process_python(audio_in, enhance=enhance)
@@ -325,7 +360,14 @@ class AudioPostProcessor:
         
         return output_path, stats
     
-    def enhance_audio(self, input_path, output_path):
+    def enhance_audio(
+        self,
+        input_path,
+        output_path,
+        *,
+        enable_reverb: bool | None = None,
+        purpose: str = "narration",
+    ):
         """
         Enhance audio quality using FFmpeg filters or Python processing.
         
@@ -348,7 +390,14 @@ class AudioPostProcessor:
                 with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
                     temp_path = tmp.name
                 try:
-                    self.process(input_path, temp_path, enhance=True, method='auto')
+                    self.process(
+                        input_path,
+                        temp_path,
+                        enhance=True,
+                        method='auto',
+                        enable_reverb=enable_reverb,
+                        purpose=purpose,
+                    )
                     # Check temp duration
                     if os.path.exists(temp_path):
                         audio_temp, sr_temp = sf.read(temp_path)
@@ -361,7 +410,14 @@ class AudioPostProcessor:
                     if os.path.exists(temp_path):
                         os.unlink(temp_path)
             else:
-                self.process(input_path, output_path, enhance=True, method='auto')
+                self.process(
+                    input_path,
+                    output_path,
+                    enhance=True,
+                    method='auto',
+                    enable_reverb=enable_reverb,
+                    purpose=purpose,
+                )
             
             # Check output duration
             if os.path.exists(output_path):

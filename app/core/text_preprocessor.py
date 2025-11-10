@@ -8,6 +8,47 @@ import unicodedata
 from typing import Dict, List, Optional
 
 
+# --- Helpers (anchor: TEXT_HELPERS) ---
+_TERMINAL_PUNCT_RX = re.compile(r"[\.!?]\s*$")
+
+
+def safe_truncate_at_sentence(text: str, max_chars: int) -> str:
+    """Truncate text while preferring natural sentence boundaries."""
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+
+    cut = text[:max_chars].rstrip()
+
+    if _TERMINAL_PUNCT_RX.search(cut):
+        return cut
+
+    last_term = max(cut.rfind("."), cut.rfind("!"), cut.rfind("?"))
+    if last_term >= 0 and last_term >= len(cut) - 120:
+        return cut[: last_term + 1].rstrip()
+
+    last_space = cut.rfind(" ")
+    if last_space > 0:
+        return (cut[:last_space].rstrip()) + "..."
+    return cut + "..."
+
+
+def normalize_unicode_text(s: str, ascii_only: bool = True) -> str:
+    """Normalize text; optionally preserve non-ASCII graphemes."""
+    s = unicodedata.normalize("NFKC", s)
+    s = s.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+    s = s.replace("–", "-").replace("—", "-")
+    s = s.replace("\u00A0", " ")
+
+    if ascii_only:
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        s = s.encode("ascii", errors="ignore").decode("ascii", errors="ignore")
+
+    s = re.sub(r"[ \t]+", " ", s)
+    return s.strip()
+
+
 class TextPreprocessor:
     """Optimize text for natural TTS generation"""
 
@@ -71,13 +112,9 @@ class TextPreprocessor:
         
         return 'none'
 
-    def normalize_unicode(self, text: str) -> str:
-        """Normalize unicode characters to ASCII-compatible forms"""
-        # NFKD normalization (compatibility decomposition)
-        text = unicodedata.normalize('NFKD', text)
-        # Keep only ASCII-compatible characters
-        text = text.encode('ascii', 'ignore').decode('ascii')
-        return text
+    def normalize_unicode(self, text: str, ascii_only: bool = True) -> str:
+        """Normalize unicode characters with optional accent preservation."""
+        return normalize_unicode_text(text, ascii_only=ascii_only)
 
     def normalize_quotes(self, text: str) -> str:
         """Normalize various quote characters to standard forms"""
@@ -438,6 +475,7 @@ class TextPreprocessor:
     def prepare_for_tts(
         self,
         text: str,
+        ascii_only: bool = True,
         expand_abbrev: bool = True,
         add_prosody: bool = True,
         convert_numbers: bool = False,
@@ -468,7 +506,7 @@ class TextPreprocessor:
         text = self.normalize_quotes(text)
 
         # Step 2: Normalize unicode
-        text = self.normalize_unicode(text)
+        text = self.normalize_unicode(text, ascii_only=ascii_only)
 
         # Step 2.5: Remove spaces around hyphens in compound words (e.g., "wool - lined" → "wool lined")
         text = re.sub(r'\s+-\s+', ' ', text)
@@ -510,27 +548,7 @@ class TextPreprocessor:
         text = self.remove_excessive_whitespace(text)
 
         # Step 10: Limit length (XTTS works best with shorter segments)
-        # If text is very long, truncate at sentence boundary and add completion marker
-        max_length = 500
-        if len(text) > max_length:
-            # Find last sentence boundary before max_length
-            truncated = text[:max_length]
-            last_period = max(
-                truncated.rfind('.'),
-                truncated.rfind('!'),
-                truncated.rfind('?')
-            )
-            if last_period > 0:
-                text = text[:last_period + 1]
-            else:
-                # No sentence boundary found - truncate at word boundary and add ellipsis
-                # to prevent XTTS from hallucinating sentence completions
-                truncated = text[:max_length]
-                last_space = truncated.rfind(' ')
-                if last_space > max_length * 0.8:  # Only truncate at space if not too far back
-                    text = text[:last_space] + '...'
-                else:
-                    text = truncated + '...'  # Force truncation with ellipsis
+        text = safe_truncate_at_sentence(text, max_chars=500)
 
         return text
 
