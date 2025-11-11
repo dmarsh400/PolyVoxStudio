@@ -9,11 +9,11 @@ def get_nlp():
     global _nlp
     if _nlp is None:
         try:
-            _nlp = spacy.load("en_core_web_sm")
+            _nlp = spacy.load("en_core_web_md")
         except OSError:
             raise RuntimeError(
-                "spaCy model 'en_core_web_sm' not found. "
-                "Run: python -m spacy download en_core_web_sm"
+                "spaCy model 'en_core_web_md' not found. "
+                "Run: python -m spacy download en_core_web_md"
             )
     return _nlp
 
