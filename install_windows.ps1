@@ -228,8 +228,8 @@ function Install-Torch {
 function Install-Dependencies {
     Write-Host "Installing PolyVox core dependencies" -ForegroundColor Green
     Invoke-InEnv "pip" @("install", "-r", (Join-Path $projectRoot "requirements_min.txt"))
-    Write-Host "Downloading spaCy model (en_core_web_sm)" -ForegroundColor Green
-    Invoke-InEnv "spacy" @("download", "en_core_web_sm")
+    Write-Host "Downloading spaCy model (en_core_web_md)" -ForegroundColor Green
+    Invoke-InEnv "spacy" @("download", "en_core_web_md")
 }
 
 function Show-Notes {

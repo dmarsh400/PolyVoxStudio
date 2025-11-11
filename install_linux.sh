@@ -83,8 +83,8 @@ install_torch() {
 install_requirements() {
   echo "\n📦 Installing core PolyVox dependencies"
   python -m pip install -r "${PROJECT_ROOT}/requirements_min.txt"
-  echo "\n📚 Downloading spaCy language model (en_core_web_sm)"
-  python -m spacy download en_core_web_sm
+  echo "\n📚 Downloading spaCy language model (en_core_web_md)"
+  python -m spacy download en_core_web_md
 }
 
 post_install_notes() {
