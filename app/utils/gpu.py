@@ -24,13 +24,13 @@ def ensure_spacy_model():
     try:
         import spacy
         try:
-            spacy.load("en_core_web_sm")
+            spacy.load("en_core_web_md")
             return True
         except Exception:
             pass
-        subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"], check=False)
+        subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_md"], check=False)
         try:
-            spacy.load("en_core_web_sm")
+            spacy.load("en_core_web_md")
             return True
         except Exception:
             return False
