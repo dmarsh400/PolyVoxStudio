@@ -10,6 +10,11 @@ from typing import Dict, List, Optional
 
 # --- Helpers (anchor: TEXT_HELPERS) ---
 _TERMINAL_PUNCT_RX = re.compile(r"[\.!?]\s*$")
+_SAFE_SENTENCE_END_RX = re.compile(
+    r"\.(?P<trailing>[\"'\)\]\}\u2019\u201d\u203d\u300d]*)"
+    r"(?P<spacing>\s*(?:$|\n))",
+    re.MULTILINE,
+)
 
 
 def safe_truncate_at_sentence(text: str, max_chars: int) -> str:
@@ -184,6 +189,49 @@ class TextPreprocessor:
         text = re.sub(r'([!?])"', r'\1 "', text)
 
         return text
+
+    def apply_safe_sentence_endings(self, text: str, strategy: str | None = None) -> str:
+        """Mitigate XTTS end-of-line artifacts by reshaping terminal periods.
+
+        Args:
+            text: Cleaned text to adjust.
+            strategy: One of {"underscore", "comma", "comma-space", "strip", "space", "none"}.
+
+        Returns:
+            Text with adjusted end-of-sentence markers when strategy is enabled.
+        """
+
+        if not strategy:
+            return text
+
+        normalized = strategy.strip().lower()
+        if normalized in {"none", "off", "disable", "disabled"}:
+            return text
+
+        def _replacement(match: re.Match[str]) -> str:
+            trailing = match.group("trailing") or ""
+            spacing = match.group("spacing") or ""
+
+            if normalized in {"comma", "comma-space"}:
+                replacement = ".,"
+                if normalized == "comma-space" and (not spacing or not spacing.startswith(" ")):
+                    spacing = " " + spacing
+            elif normalized in {"underscore", "underscore-space"}:
+                replacement = "._"
+                if normalized == "underscore-space" and (not spacing or not spacing.startswith(" ")):
+                    spacing = " " + spacing
+            elif normalized in {"strip", "space", "blank"}:
+                replacement = ""
+                if spacing and spacing[0] == "\n":
+                    spacing = "\n" + spacing.lstrip("\n")
+                elif not spacing.startswith(" "):
+                    spacing = " " + spacing
+            else:
+                replacement = "."
+
+            return f"{replacement}{trailing}{spacing}"
+
+        return _SAFE_SENTENCE_END_RX.sub(_replacement, text)
 
     def remove_excessive_whitespace(self, text: str) -> str:
         """Clean up spacing"""
@@ -483,7 +531,8 @@ class TextPreprocessor:
         handle_calibers: bool = True,
         dehyphen_mode: str = "space",          # "space" | "join" | "off"
         apply_acronyms: bool = False,          # (5) optional
-        shield_links: bool = False             # (5) optional
+        shield_links: bool = False,            # (5) optional
+        safe_sentence_endings: str | None = None,
     ) -> str:
         """
         Full preprocessing pipeline
@@ -543,6 +592,9 @@ class TextPreprocessor:
         # Step 8: Add prosody hints
         if add_prosody:
             text = self.add_prosody_hints(text)
+
+        # Step 8.5: Stabilize end-of-sentence punctuation if requested
+        text = self.apply_safe_sentence_endings(text, strategy=safe_sentence_endings)
 
         # Step 9: Clean whitespace
         text = self.remove_excessive_whitespace(text)

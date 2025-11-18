@@ -1,41 +1,14 @@
 import os
+from typing import Any, Dict
+
+import numpy as np
+import soundfile as sf
 import torch
 from TTS.api import TTS
+
 from app.core.gpu_manager import get_device, release_device
 from app.core.text_preprocessor import TextPreprocessor
 from app.core.audio_postprocessor import AudioPostProcessor
-import soundfile as sf
-import numpy as np
-import librosa
-from pathlib import Path
-from typing import Any, Dict
-
-# --- Accent control (removed for simplicity) ---
-
-def normalize_for_tts(text):
-    """Normalize text to prevent TTS drift and artifacts."""
-    import re
-    
-    # Expand common abbreviations
-    abbr = {
-        "Mr.": "Mister", "Mrs.": "Missus", "Ms.": "Miss", "Dr.": "Doctor",
-        "Prof.": "Professor", "etc.": "et cetera", "vs.": "versus",
-        "Jr.": "Junior", "Sr.": "Senior"
-    }
-    for k, v in abbr.items():
-        text = text.replace(k, v)
-    
-    # Remove stray periods in mid-sentence (like A., B.)
-    text = re.sub(r'\b([A-Za-z])\.(\s)', r'\1\2', text)
-    
-    # Handle domains (remove dot in .com etc.)
-    text = re.sub(r'\b(\w+)\.(com|org|net|gov|edu)\b', r'\1 \2', text)
-    
-    # Ensure proper sentence-final punctuation
-    if text and text.rstrip()[-1] not in ".!?":
-        text += "."
-    
-    return text
 
 # Global XTTS model instance (lazy loaded)
 _tts_model = None
@@ -43,68 +16,200 @@ _preprocessor = None
 _postprocessor = None
 
 
-# --- XTTS Generation Presets (anchor: XTTS_PRESETS) ---
-XTTS_GENERATION_PRESETS = {
-    "stable_no_sample": {
-        "do_sample": False,
-        "num_beams": 1,
-        "temperature": 0.1,
-        "top_p": 1.0,
-        "top_k": 0,
-        "repetition_penalty": 2.0,
-        "length_penalty": 1.0,
-    },
-    "expressive": {
-        "do_sample": True,
-        "num_beams": 1,
-        "temperature": 0.7,
-        "top_p": 0.85,
-        "top_k": 50,
-        "repetition_penalty": 2.0,
-        "length_penalty": 1.0,
-    },
+def _env_flag(var_name: str, default: bool) -> bool:
+    value = os.getenv(var_name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _env_float(var_name: str, default: float) -> float:
+    value = os.getenv(var_name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+def _env_string(var_name: str, default: str) -> str:
+    value = os.getenv(var_name)
+    if value is None or not value.strip():
+        return default
+    return value.strip()
+
+
+SAFE_SENTENCE_ENDINGS_DEFAULT = _env_string("POLYVOX_SAFE_SENTENCE_ENDINGS", "strip")
+
+TAIL_TRIM_DEFAULTS: Dict[str, Any] = {
+    "enabled": _env_flag("POLYVOX_TAIL_TRIM_ENABLED", False),
+    "seconds_per_char": _env_float("POLYVOX_TAIL_TRIM_SECONDS_PER_CHAR", 0.052),
+    "seconds_per_word": _env_float("POLYVOX_TAIL_TRIM_SECONDS_PER_WORD", 0.165),
+    "base_padding": _env_float("POLYVOX_TAIL_TRIM_PADDING_SECONDS", 0.45),
+    "cutoff_ratio": _env_float("POLYVOX_TAIL_TRIM_CUTOFF_RATIO", 1.08),
+    "max_ratio": _env_float("POLYVOX_TAIL_TRIM_MAX_RATIO", 1.38),
+    "max_extra_seconds": _env_float("POLYVOX_TAIL_TRIM_MAX_EXTRA_SECONDS", 2.4),
+    "min_duration": _env_float("POLYVOX_TAIL_TRIM_MIN_DURATION", 0.95),
+    "fade_out_ms": _env_float("POLYVOX_TAIL_TRIM_FADE_OUT_MS", 35.0),
 }
 
-# Map character/speaker names to presets
-SPEAKER_PRESET_MAP = {
-    "Narrator": "stable_no_sample",
-}
+
+def _resolve_safe_sentence_strategy(voice_entry: Dict[str, Any]) -> str | None:
+    value = voice_entry.get("safe_sentence_endings") if isinstance(voice_entry, dict) else None
+    if value is None:
+        return SAFE_SENTENCE_ENDINGS_DEFAULT
+    if isinstance(value, bool):
+        return SAFE_SENTENCE_ENDINGS_DEFAULT if value else "none"
+    normalized = str(value).strip().lower()
+    if normalized in {"auto", "default"}:
+        return SAFE_SENTENCE_ENDINGS_DEFAULT
+    return str(value)
 
 
-def _get_generation_kwargs(speaker_name: str | None, fallback: str = "expressive") -> tuple[str, Dict[str, Any]]:
-    """Resolve the XTTS generation preset for the given speaker."""
-    preset_name = SPEAKER_PRESET_MAP.get((speaker_name or "").strip(), fallback)
-    preset = XTTS_GENERATION_PRESETS.get(preset_name)
-    if preset is None:
-        preset_name = "stable_no_sample"
-        preset = XTTS_GENERATION_PRESETS[preset_name]
-    # Return a copy so downstream code can tweak without mutating the preset
-    preset_copy = dict(preset)
-    if not preset_copy.get("do_sample", True):
-        preset_copy["temperature"] = None
-        preset_copy["top_p"] = None
-        preset_copy["top_k"] = None
-    return preset_name, preset_copy
+def _build_tail_trim_config(voice_entry: Dict[str, Any]) -> Dict[str, Any]:
+    cfg = dict(TAIL_TRIM_DEFAULTS)
+    if not isinstance(voice_entry, dict):
+        return cfg
+
+    entry_cfg = voice_entry.get("tail_trim")
+    if isinstance(entry_cfg, dict):
+        for key in cfg:
+            if key in entry_cfg and entry_cfg[key] is not None:
+                try:
+                    if isinstance(cfg[key], bool):
+                        cfg[key] = bool(entry_cfg[key])
+                    else:
+                        cfg[key] = float(entry_cfg[key])
+                except (TypeError, ValueError):
+                    pass
+
+    if "tail_trim_enabled" in voice_entry:
+        cfg["enabled"] = bool(voice_entry["tail_trim_enabled"])
+    if "tail_trim_seconds_per_char" in voice_entry:
+        try:
+            cfg["seconds_per_char"] = float(voice_entry["tail_trim_seconds_per_char"])
+        except (TypeError, ValueError):
+            pass
+    if "tail_trim_seconds_per_word" in voice_entry:
+        try:
+            cfg["seconds_per_word"] = float(voice_entry["tail_trim_seconds_per_word"])
+        except (TypeError, ValueError):
+            pass
+
+    return cfg
 
 
-# --- Crossfade Utility (anchor: SAFE_CROSSFADE) ---
-def apply_linear_crossfade(prev: np.ndarray, next_: np.ndarray, sr: int, fade_ms: int = 100) -> np.ndarray:
-    """Concatenate two clips with a linear crossfade to avoid comb-filter buzz."""
-    if prev.size == 0:
-        return next_.copy()
-    if next_.size == 0:
-        return prev.copy()
+def _load_duration_seconds(path: str | None) -> float:
+    if not path or not os.path.exists(path):
+        return 0.0
+    try:
+        data, sr = sf.read(path)
+        if sr <= 0:
+            return 0.0
+        return float(len(data)) / float(sr)
+    except Exception as exc:
+        print(f"[voices.py] Failed to probe duration for {path}: {exc}")
+        return 0.0
 
-    fade = max(1, int(sr * (fade_ms / 1000.0)))
-    if prev.size < fade or next_.size < fade:
-        fade = max(1, min(prev.size, next_.size, fade))
 
-    fade_out = np.linspace(1.0, 0.0, fade, dtype=prev.dtype)
-    fade_in = np.linspace(0.0, 1.0, fade, dtype=next_.dtype)
+def _estimate_expected_duration_seconds(
+    cleaned_text: str,
+    seconds_per_char: float,
+    seconds_per_word: float,
+    base_padding: float,
+    reference_duration: float = 0.0,
+) -> float:
+    text = cleaned_text.strip()
+    char_count = max(len(text), 1)
+    word_count = max(len(text.split()), 1)
+    estimate = (
+        base_padding
+        + (char_count * max(seconds_per_char, 0.0))
+        + (word_count * max(seconds_per_word, 0.0))
+    )
+    if reference_duration > 0.0:
+        estimate = max(estimate, reference_duration * 0.6)
+    return estimate
 
-    cross = prev[-fade:] * fade_out + next_[:fade] * fade_in
-    glued = np.concatenate([prev[:-fade], cross, next_[fade:]])
-    return glued
+
+def _maybe_trim_tail_artifacts(
+    audio_path: str,
+    cleaned_text: str,
+    tail_trim_config: Dict[str, Any],
+    *,
+    reference_path: str | None = None,
+) -> None:
+    if not tail_trim_config.get("enabled", True):
+        return
+
+    if not os.path.exists(audio_path):
+        print(f"[voices.py] Tail trim skipped, file missing: {audio_path}")
+        return
+
+    try:
+        audio, sr = sf.read(audio_path)
+    except Exception as exc:
+        print(f"[voices.py] Tail trim failed to read audio: {exc}")
+        return
+
+    if sr <= 0:
+        return
+
+    if isinstance(audio, np.ndarray) and audio.ndim > 1:
+        samples = audio.shape[0]
+    else:
+        samples = len(audio)
+
+    duration = samples / float(sr)
+    ref_dur = _load_duration_seconds(reference_path)
+
+    expected = _estimate_expected_duration_seconds(
+        cleaned_text,
+        seconds_per_char=float(tail_trim_config.get("seconds_per_char", 0.05)),
+        seconds_per_word=float(tail_trim_config.get("seconds_per_word", 0.16)),
+        base_padding=float(tail_trim_config.get("base_padding", 0.4)),
+        reference_duration=ref_dur,
+    )
+
+    max_ratio = float(tail_trim_config.get("max_ratio", 1.4))
+    max_extra = float(tail_trim_config.get("max_extra_seconds", 2.0))
+    allowed_duration = min(expected * max_ratio, expected + max_extra)
+
+    if duration <= allowed_duration:
+        return
+
+    cutoff_ratio = float(tail_trim_config.get("cutoff_ratio", 1.1))
+    min_duration = float(tail_trim_config.get("min_duration", 0.9))
+    fade_out_ms = float(tail_trim_config.get("fade_out_ms", 30.0))
+
+    target_duration = max(
+        min(duration, expected * cutoff_ratio),
+        min_duration,
+    )
+
+    new_samples = min(samples, int(target_duration * sr))
+    if new_samples >= samples:
+        return
+
+    trimmed = audio[:new_samples]
+
+    if fade_out_ms > 0:
+        fade_samples = min(int(sr * (fade_out_ms / 1000.0)), new_samples)
+        if fade_samples > 0:
+            fade_curve = np.linspace(1.0, 0.0, fade_samples, endpoint=True)
+            if isinstance(trimmed, np.ndarray) and trimmed.ndim > 1:
+                trimmed[-fade_samples:, :] *= fade_curve[:, None]
+            else:
+                trimmed[-fade_samples:] *= fade_curve
+
+    try:
+        sf.write(audio_path, trimmed, sr)
+        print(
+            f"[voices.py] Tail trim applied: was {duration:.2f}s → now {target_duration:.2f}s"
+        )
+    except Exception as exc:
+        print(f"[voices.py] Tail trim failed to write audio: {exc}")
 
 
 def _patch_xtts_generation():
@@ -119,7 +224,6 @@ def _patch_xtts_generation():
     if not code_obj:
         return
 
-    # Detect the stub that only raises NotImplementedError
     if not any(
         isinstance(const, str) and "prepare_inputs_for_generation" in const and ".generate()" in const
         for const in code_obj.co_consts
@@ -132,7 +236,7 @@ def _patch_xtts_generation():
         past_key_values=None,
         inputs_embeds=None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ):
         token_type_ids = kwargs.get("token_type_ids")
 
         if past_key_values:
@@ -206,7 +310,7 @@ def get_postprocessor():
         _postprocessor = AudioPostProcessor()
     return _postprocessor
 
-def synthesize_text(voice_entry, text, out_path, job_idx=0, speaker_name=None):
+def synthesize_text(voice_entry, text, out_path, job_idx=0, speaker_name=None, **_ignored):
     """
     Generate speech audio from text using XTTS v2.
     Auto-distributes jobs across available GPUs with automatic CPU fallback.
@@ -220,133 +324,54 @@ def synthesize_text(voice_entry, text, out_path, job_idx=0, speaker_name=None):
         # Get TTS model
         tts = get_tts_model()
         
-        # Get preprocessor
+        # Get preprocessor and clean text
         preprocessor = get_preprocessor()
-
-        # 1) Segment by emotion so styles don't bleed across lines
-        segments = preprocessor.segment_by_emotion(text)
-
-        # 2) Resolve speaker reference + language
+        safe_strategy = _resolve_safe_sentence_strategy(voice_entry)
+        cleaned_text = preprocessor.prepare_for_tts(
+            text,
+            safe_sentence_endings=safe_strategy,
+        )
+        
+        # Get speaker reference audio
         speaker_wav = voice_entry.get("voice_file", voice_entry.get("speaker_wav"))
         if not speaker_wav or not os.path.exists(speaker_wav):
             raise ValueError(f"Speaker reference audio not found: {speaker_wav}")
-
-        # Hardcode narrator to always be neutral
-        if "narrator" in os.path.basename(speaker_wav).lower():
-            for seg in segments:
-                seg["style"] = "none"
-
-        # Resolve language (simplified to English for natural synthesis)
-        language = "en"
-
-        resolved_speaker = speaker_name or voice_entry.get("character") or voice_entry.get("label") or voice_entry.get("name") or Path(speaker_wav).stem
-        preset_name, preset_kwargs = _get_generation_kwargs(resolved_speaker)
+        
+        # Get language (default to English)
+        language = voice_entry.get("language", "en")
+        
+        resolved_speaker = speaker_name or voice_entry.get("character") or voice_entry.get("label")
+        if not resolved_speaker:
+            resolved_speaker = voice_entry.get("name") or os.path.splitext(os.path.basename(speaker_wav))[0]
 
         print(f"[voices.py] Synthesizing with XTTS on device={device_str} → {out_path}")
         print(
-            f"[voices.py] Using speaker: {os.path.basename(speaker_wav)}, language: {language}, preset: {preset_name}"
+            f"[voices.py] Using speaker: {os.path.basename(speaker_wav)}"
+            f", resolved name: {resolved_speaker}, language: {language}"
         )
-        print(f"[voices.py] Segments: {len(segments)}")
-
-        # 3) Synthesize each segment with its own style cue, then glue audio
-        audio_parts = []
-        sr_used = None
+        print(f"[voices.py] Text: {cleaned_text[:100]}...")
         
-        tmp_dir = Path(".polyvox_tmp")
-        tmp_dir.mkdir(exist_ok=True)
+        tail_trim_config = _build_tail_trim_config(voice_entry)
 
-        post = get_postprocessor()
+        # Generate audio with XTTS
+        tts.tts_to_file(
+            text=cleaned_text,
+            file_path=out_path,
+            speaker_wav=speaker_wav,
+            language=language
+        )
+        
+        # Post-process audio for quality enhancement
+        postprocessor = get_postprocessor()
+        postprocessor.enhance_audio(out_path, out_path)
 
-        voice_language = (voice_entry.get("language") or language or "en").lower()
-        preserve_accents = voice_entry.get("preserve_accents")
-        if preserve_accents is None:
-            preserve_accents = not voice_language.startswith("en")
-        ascii_only = not preserve_accents
-
-        for idx, seg in enumerate(segments):
-            raw_seg = seg["text"]
-            style = (seg.get("style") or "none").lower()
-            
-            # Clean + inject a small textual cue (engine may respond),
-            # then rely on post-style shaping to guarantee an audible change.
-            cleaned = preprocessor.prepare_for_tts(raw_seg, ascii_only=ascii_only)
-            
-            # Normalize text to prevent drift
-            cleaned = normalize_for_tts(cleaned)
-
-            # Bias orthography + lexicon for the target accent (removed for simplicity)
-            text_to_synth = cleaned
-
-            tmp_wav = tmp_dir / f"seg_{job_idx}_{idx}.wav"
-            print(f"[voices.py] Synthesizing segment {idx}: '{cleaned}' (len={len(cleaned)})")
-            tts_kwargs = {
-                "text": text_to_synth,
-                "file_path": str(tmp_wav),
-                "speaker_wav": speaker_wav,
-                "language": language,
-            }
-            tts_kwargs.update(preset_kwargs)
-            tts.tts_to_file(**tts_kwargs)
-            if os.path.exists(str(tmp_wav)):
-                audio_check, _ = sf.read(str(tmp_wav))
-                print(f"[voices.py] Generated audio length: {len(audio_check)} samples")
-            else:
-                print(f"[voices.py] Audio file not created: {tmp_wav}")
-
-            audio, sr = sf.read(str(tmp_wav))
-            if sr_used is None:
-                sr_used = sr
-            elif sr != sr_used:
-                try:
-                    orig_sr = sr
-                    audio = librosa.resample(audio, orig_sr=orig_sr, target_sr=sr_used)
-                    sr = sr_used
-                    print(
-                        f"[voices.py] Resampled segment {idx} from {orig_sr}Hz to {sr_used}Hz for consistency"
-                    )
-                except Exception as resample_err:
-                    print(f"[voices.py] Warning: resample failed ({resample_err}); using {sr}Hz for this segment")
-                    sr_used = sr
-
-            # Add trailing silence to prevent end-of-sequence drift
-            silence_duration = 0.2  # 200ms
-            silence_samples = int(silence_duration * sr)
-            silence = np.zeros(silence_samples, dtype=audio.dtype)
-            audio = np.concatenate([audio, silence])
-
-            # Subtle post-style shading per segment
-            audio = post.apply_style_preset(audio, style)
-            # Normalize volume per segment for consistent levels
-            audio = post.normalize_audio(audio)
-            audio_parts.append(audio.astype(np.float32))
-
-        # 4) Concatenate with clean crossfades and optional style pauses
-        if not audio_parts:
-            raise RuntimeError("No audio generated.")
-
-        if sr_used is None:
-            sr_used = 24000
-
-        glued = audio_parts[0]
-        prev_style = segments[0].get("style", "none") if segments else "none"
-
-        for idx_part, part in enumerate(audio_parts[1:], start=1):
-            current_style = segments[idx_part].get("style", "none") if idx_part < len(segments) else "none"
-
-            if prev_style and current_style and prev_style != current_style:
-                pause_samples = int(0.05 * sr_used)
-                if pause_samples > 0:
-                    glued = np.concatenate([glued, np.zeros(pause_samples, dtype=glued.dtype)])
-
-            glued = apply_linear_crossfade(glued, part, sr_used, fade_ms=100)
-            prev_style = current_style
-
-        glued = glued.astype(np.float32, copy=False)
-
-        # 5) Write and run your normal enhancement
-        sf.write(out_path, glued, sr_used)
-        print(f"[voices.py] Wrote glued audio to {out_path}, length: {len(glued)} samples @ {sr_used}Hz, duration: {len(glued)/sr_used:.2f}s")
-        post.enhance_audio(out_path, out_path)
+        # Tail trimming fallback to reduce end-of-line artifacts
+        _maybe_trim_tail_artifacts(
+            out_path,
+            cleaned_text,
+            tail_trim_config,
+            reference_path=speaker_wav,
+        )
         
         # Release device back to pool
         if device_str:
