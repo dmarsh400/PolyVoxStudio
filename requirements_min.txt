@@ -22,6 +22,7 @@ librosa>=0.10.0
 mutagen>=1.47.0
 rapidfuzz>=3.0.0
 faster-whisper>=1.0.0
+silero-vad>=5.1.0
 
 # GUI
 customtkinter>=5.2.0
