@@ -89,6 +89,35 @@ class TextPreprocessor:
             '»': '"',  # Right guillemet
         }
 
+        self._speaker_open_rx = re.compile(r'^\s*\[[^\]\n]{1,40}\]\s*')
+        self._speaker_close_rx = re.compile(r'\s*\[\s*/\s*[^\]\n]{0,40}\]\s*$')
+        self._dialogue_tag_rx = re.compile(r'\[\s*/?\s*(?:[A-Za-z][A-Za-z0-9_. -]{0,30}|)\s*\]')
+        self._broken_contraction_rx = re.compile(r"\b([A-Za-z]+)\s+n'\s*t\b", re.IGNORECASE)
+        self._split_apostrophe_rx = re.compile(r"(\w)'\s+(\w)")
+
+    def strip_dialogue_markup(self, text: str) -> str:
+        """Remove BookNLP-style [Speaker]...[/] wrappers without touching real brackets."""
+        original = text
+        text = self._speaker_open_rx.sub('', text)
+        text = self._speaker_close_rx.sub('', text)
+        text = text.replace('[/ ]', '').replace('[/]', '')
+        # Some excerpts repeat inline tags; remove only bare speaker markers
+        def _prune(match: re.Match[str]) -> str:
+            token = match.group(0)
+            # leave placeholders like [link] or [email] which include lowercase words
+            if token.lower() in {'[link]', '[email]'}:
+                return token
+            return ''
+
+        text = self._dialogue_tag_rx.sub(_prune, text)
+        return text if text else original
+
+    def repair_split_contractions(self, text: str) -> str:
+        """Collapse artifacts like "do n' t" or "I' ll" back into standard forms."""
+        text = self._broken_contraction_rx.sub(lambda m: f"{m.group(1)}n't", text)
+        text = self._split_apostrophe_rx.sub(r"\1'\2", text)
+        return text
+
     def infer_emotion(self, text: str) -> str:
         """Infer emotion from text content using heuristics."""
         text_lower = text.lower()
@@ -554,8 +583,14 @@ class TextPreprocessor:
         # Step 1: Normalize quotes first so curly apostrophes survive ASCII cleanup
         text = self.normalize_quotes(text)
 
+        # Remove lingering [Speaker] markup from BookNLP exports
+        text = self.strip_dialogue_markup(text)
+
         # Step 2: Normalize unicode
         text = self.normalize_unicode(text, ascii_only=ascii_only)
+
+        # Repair contractions split by tokenization artifacts (e.g., do n' t)
+        text = self.repair_split_contractions(text)
 
         # Step 2.5: Remove spaces around hyphens in compound words (e.g., "wool - lined" → "wool lined")
         text = re.sub(r'\s+-\s+', ' ', text)

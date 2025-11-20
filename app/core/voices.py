@@ -40,7 +40,7 @@ def _env_string(var_name: str, default: str) -> str:
     return value.strip()
 
 
-SAFE_SENTENCE_ENDINGS_DEFAULT = _env_string("POLYVOX_SAFE_SENTENCE_ENDINGS", "strip")
+SAFE_SENTENCE_ENDINGS_DEFAULT = _env_string("POLYVOX_SAFE_SENTENCE_ENDINGS", "none")
 
 TAIL_TRIM_DEFAULTS: Dict[str, Any] = {
     "enabled": _env_flag("POLYVOX_TAIL_TRIM_ENABLED", False),
