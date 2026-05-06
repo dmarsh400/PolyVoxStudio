@@ -1,0 +1,152 @@
+{
+  "tough_male_1_gruff": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-GuyNeural",
+      "description": "Tough Male - Deep, gruff, intimidating",
+      "category": "male_character",
+      "style": "angry",
+      "pitch": "-15%",
+      "test_text": "\n            Listen up. I don't have time for games. You want to do this the hard way? \n            That's fine by me. I've dealt with worse than you. Much worse.\n        "
+    },
+    "test_path": "voices/tests/tough_male_1_gruff_test.wav",
+    "reference_path": "voices/references/tough_male_1_gruff.wav",
+    "duration": 9.237897396087646,
+    "rtf": 1.7012702386901744
+  },
+  "tough_male_2_street": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-TonyNeural",
+      "description": "Tough Male - Street-smart, aggressive",
+      "category": "male_character",
+      "style": "shouting",
+      "pitch": "-10%",
+      "test_text": "\n            You think you can just walk in here? This is my territory, my rules.\n            Nobody comes through without my say-so. You got that?\n        "
+    },
+    "test_path": "voices/tests/tough_male_2_street_test.wav",
+    "reference_path": "voices/references/tough_male_2_street.wav",
+    "duration": 6.121875286102295,
+    "rtf": 1.1783411945532456
+  },
+  "tough_male_3_military": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-SteffanNeural",
+      "description": "Tough Male - Military commander, authoritative",
+      "category": "male_character",
+      "style": "shouting",
+      "pitch": "-8%",
+      "test_text": "\n            Attention! We move out at oh-six-hundred. I expect every soldier ready and armed.\n            This is not a drill. Failure is not an option. Do I make myself clear?\n        "
+    },
+    "test_path": "voices/tests/tough_male_3_military_test.wav",
+    "reference_path": "voices/references/tough_male_3_military.wav",
+    "duration": 7.608902215957642,
+    "rtf": 1.4526350164103934
+  },
+  "smooth_male_charming": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-BrandonNeural",
+      "description": "Smooth Male - Charming, sophisticated",
+      "category": "male_character",
+      "style": "friendly",
+      "pitch": "0%",
+      "test_text": "\n            Well hello there. I must say, it's an absolute pleasure to meet you.\n            You have impeccable taste. May I interest you in a glass of wine?\n        "
+    },
+    "test_path": "voices/tests/smooth_male_charming_test.wav",
+    "reference_path": "voices/references/smooth_male_charming.wav",
+    "duration": 5.810436010360718,
+    "rtf": 1.3481290047240646
+  },
+  "nerdy_male_awkward": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-RogerNeural",
+      "description": "Nerdy Male - Awkward, intelligent",
+      "category": "male_character",
+      "style": "excited",
+      "pitch": "+5%",
+      "test_text": "\n            Oh wow, that's fascinating! Did you know the probability of that occurring is...\n            wait, let me calculate... approximately zero point zero three percent! Incredible!\n        "
+    },
+    "test_path": "voices/tests/nerdy_male_awkward_test.wav",
+    "reference_path": "voices/references/nerdy_male_awkward.wav",
+    "duration": 6.5599963665008545,
+    "rtf": 1.2626709290069655
+  },
+  "cute_girl_bubbly": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-JennyNeural",
+      "description": "Cute Girl - Bubbly, energetic, young",
+      "category": "female_character",
+      "style": "cheerful",
+      "pitch": "+8%",
+      "test_text": "\n            Oh my gosh, that's like, totally amazing! I'm so excited I can barely breathe!\n            This is going to be the best day ever! Don't you just love it?\n        "
+    },
+    "test_path": "voices/tests/cute_girl_bubbly_test.wav",
+    "reference_path": "voices/references/cute_girl_bubbly.wav",
+    "duration": 7.570374250411987,
+    "rtf": 1.372605025458477
+  },
+  "tough_female_badass": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-MichelleNeural",
+      "description": "Tough Female - Badass, no-nonsense",
+      "category": "female_character",
+      "style": "angry",
+      "pitch": "-5%",
+      "test_text": "\n            I've heard enough. You're done talking. I don't take orders from anyone,\n            especially not from someone like you. Now get out of my way.\n        "
+    },
+    "test_path": "voices/tests/tough_female_badass_test.wav",
+    "reference_path": "voices/references/tough_female_badass.wav",
+    "duration": 6.474910736083984,
+    "rtf": 1.3952544324272342
+  },
+  "mature_female_wise": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-SaraNeural",
+      "description": "Mature Female - Wise, motherly, warm",
+      "category": "female_character",
+      "style": "calm",
+      "pitch": "-3%",
+      "test_text": "\n            Listen to me, dear. I've lived long enough to know that sometimes,\n            the hardest path is the right one. Trust your heart, but use your head.\n        "
+    },
+    "test_path": "voices/tests/mature_female_wise_test.wav",
+    "reference_path": "voices/references/mature_female_wise.wav",
+    "duration": 5.987182378768921,
+    "rtf": 1.2174018663621229
+  },
+  "sultry_female_seductive": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-AshleyNeural",
+      "description": "Sultry Female - Seductive, mysterious",
+      "category": "female_character",
+      "style": "whispering",
+      "pitch": "-2%",
+      "test_text": "\n            Come closer. I have something to tell you. Something... important.\n            But you'll have to keep it our little secret. Can you do that?\n        "
+    },
+    "test_path": "voices/tests/sultry_female_seductive_test.wav",
+    "reference_path": "voices/references/sultry_female_seductive.wav",
+    "duration": 6.438282012939453,
+    "rtf": 1.3747221379941892
+  },
+  "professional_female_corporate": {
+    "status": "success",
+    "config": {
+      "azure_voice": "en-US-AvaNeural",
+      "description": "Professional Female - Corporate, assertive",
+      "category": "female_character",
+      "style": "newscast",
+      "pitch": "0%",
+      "test_text": "\n            Good morning. Let's review the quarterly projections. As you can see from the data,\n            we've exceeded expectations across all metrics. I expect this trend to continue.\n        "
+    },
+    "test_path": "voices/tests/professional_female_corporate_test.wav",
+    "reference_path": "voices/references/professional_female_corporate.wav",
+    "duration": 9.026945352554321,
+    "rtf": 1.4845321816502008
+  }
+}

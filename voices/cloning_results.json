@@ -1,0 +1,266 @@
+[
+  {
+    "voice_id": "african_american_male_professional",
+    "config": {
+      "azure_voice": "en-US-DavisNeural",
+      "description": "African American Male - Professional, clear",
+      "category": "african_american"
+    },
+    "success": true,
+    "reference_path": "voices/references/african_american_male_professional.wav",
+    "test_path": "voices/tests/african_american_male_professional_test.wav",
+    "duration": 5.43,
+    "rtf": 0.8204767497644021
+  },
+  {
+    "voice_id": "african_american_male_urban",
+    "config": {
+      "azure_voice": "en-US-DavisNeural",
+      "description": "African American Male - Urban style",
+      "category": "african_american",
+      "style": "excited"
+    },
+    "success": true,
+    "reference_path": "voices/references/african_american_male_urban.wav",
+    "test_path": "voices/tests/african_american_male_urban_test.wav",
+    "duration": 4.683333333333334,
+    "rtf": 0.6039920820460201
+  },
+  {
+    "voice_id": "african_american_female_professional",
+    "config": {
+      "azure_voice": "en-US-MonicaNeural",
+      "description": "African American Female - Professional",
+      "category": "african_american"
+    },
+    "success": true,
+    "reference_path": "voices/references/african_american_female_professional.wav",
+    "test_path": "voices/tests/african_american_female_professional_test.wav",
+    "duration": 4.960666666666667,
+    "rtf": 0.5696098292775892
+  },
+  {
+    "voice_id": "african_american_female_warm",
+    "config": {
+      "azure_voice": "en-US-MonicaNeural",
+      "description": "African American Female - Warm, conversational",
+      "category": "african_american",
+      "style": "friendly"
+    },
+    "success": true,
+    "reference_path": "voices/references/african_american_female_warm.wav",
+    "test_path": "voices/tests/african_american_female_warm_test.wav",
+    "duration": 4.363333333333333,
+    "rtf": 0.571639652558189
+  },
+  {
+    "voice_id": "jewish_ny_male_1",
+    "config": {
+      "azure_voice": "en-US-GuyNeural",
+      "description": "New York Male - Variant 1 (expressive)",
+      "category": "jewish_american",
+      "style": "newscast"
+    },
+    "success": true,
+    "reference_path": "voices/references/jewish_ny_male_1.wav",
+    "test_path": "voices/tests/jewish_ny_male_1_test.wav",
+    "duration": 5.056666666666667,
+    "rtf": 0.567579190826919
+  },
+  {
+    "voice_id": "jewish_ny_male_2",
+    "config": {
+      "azure_voice": "en-US-TonyNeural",
+      "description": "New York Male - Variant 2 (casual)",
+      "category": "jewish_american"
+    },
+    "success": true,
+    "reference_path": "voices/references/jewish_ny_male_2.wav",
+    "test_path": "voices/tests/jewish_ny_male_2_test.wav",
+    "duration": 5.43,
+    "rtf": 0.5723858845607133
+  },
+  {
+    "voice_id": "jewish_ny_male_3",
+    "config": {
+      "azure_voice": "en-US-JasonNeural",
+      "description": "New York Male - Variant 3 (professional)",
+      "category": "jewish_american"
+    },
+    "success": true,
+    "reference_path": "voices/references/jewish_ny_male_3.wav",
+    "test_path": "voices/tests/jewish_ny_male_3_test.wav",
+    "duration": 4.267333333333333,
+    "rtf": 0.5693418907757906
+  },
+  {
+    "voice_id": "jewish_ny_male_4",
+    "config": {
+      "azure_voice": "en-US-GuyNeural",
+      "description": "New York Male - Variant 4 (different tone)",
+      "category": "jewish_american",
+      "pitch": "+5%"
+    },
+    "success": true,
+    "reference_path": "voices/references/jewish_ny_male_4.wav",
+    "test_path": "voices/tests/jewish_ny_male_4_test.wav",
+    "duration": 4.822,
+    "rtf": 0.5674145123811245
+  },
+  {
+    "voice_id": "jewish_ny_female_1",
+    "config": {
+      "azure_voice": "en-US-JennyNeural",
+      "description": "New York Female - Variant 1",
+      "category": "jewish_american",
+      "style": "chat"
+    },
+    "success": true,
+    "reference_path": "voices/references/jewish_ny_female_1.wav",
+    "test_path": "voices/tests/jewish_ny_female_1_test.wav",
+    "duration": 4.726,
+    "rtf": 0.5721145901092775
+  },
+  {
+    "voice_id": "jewish_ny_female_2",
+    "config": {
+      "azure_voice": "en-US-AriaNeural",
+      "description": "New York Female - Variant 2",
+      "category": "jewish_american",
+      "style": "newscast-casual"
+    },
+    "success": true,
+    "reference_path": "voices/references/jewish_ny_female_2.wav",
+    "test_path": "voices/tests/jewish_ny_female_2_test.wav",
+    "duration": 4.075333333333333,
+    "rtf": 0.590181986438883
+  },
+  {
+    "voice_id": "jewish_ny_female_3",
+    "config": {
+      "azure_voice": "en-US-SaraNeural",
+      "description": "New York Female - Variant 3",
+      "category": "jewish_american"
+    },
+    "success": true,
+    "reference_path": "voices/references/jewish_ny_female_3.wav",
+    "test_path": "voices/tests/jewish_ny_female_3_test.wav",
+    "duration": 4.31,
+    "rtf": 0.5688214799920811
+  },
+  {
+    "voice_id": "jewish_ny_female_4",
+    "config": {
+      "azure_voice": "en-US-JennyNeural",
+      "description": "New York Female - Variant 4 (different tone)",
+      "category": "jewish_american",
+      "pitch": "-3%"
+    },
+    "success": true,
+    "reference_path": "voices/references/jewish_ny_female_4.wav",
+    "test_path": "voices/tests/jewish_ny_female_4_test.wav",
+    "duration": 4.363333333333333,
+    "rtf": 0.5706656698601404
+  },
+  {
+    "voice_id": "asian_american_female_1",
+    "config": {
+      "azure_voice": "en-US-JennyNeural",
+      "description": "Asian American Female - Professional",
+      "category": "asian_american"
+    },
+    "success": true,
+    "reference_path": "voices/references/asian_american_female_1.wav",
+    "test_path": "voices/tests/asian_american_female_1_test.wav",
+    "duration": 4.8646666666666665,
+    "rtf": 0.5680996374804892
+  },
+  {
+    "voice_id": "asian_american_male_1",
+    "config": {
+      "azure_voice": "en-US-RyanNeural",
+      "description": "Asian American Male - Professional",
+      "category": "asian_american"
+    },
+    "success": false,
+    "error": "Azure TTS failed: ResultReason.Canceled"
+  },
+  {
+    "voice_id": "indian_american_female",
+    "config": {
+      "azure_voice": "en-IN-NeerjaNeural",
+      "description": "Indian American Female",
+      "category": "indian_american"
+    },
+    "success": true,
+    "reference_path": "voices/references/indian_american_female.wav",
+    "test_path": "voices/tests/indian_american_female_test.wav",
+    "duration": 4.640666666666666,
+    "rtf": 0.5881184905514842
+  },
+  {
+    "voice_id": "indian_american_male",
+    "config": {
+      "azure_voice": "en-IN-PrabhatNeural",
+      "description": "Indian American Male",
+      "category": "indian_american"
+    },
+    "success": true,
+    "reference_path": "voices/references/indian_american_male.wav",
+    "test_path": "voices/tests/indian_american_male_test.wav",
+    "duration": 4.822,
+    "rtf": 0.5753566397022578
+  },
+  {
+    "voice_id": "southern_male",
+    "config": {
+      "azure_voice": "en-US-ChristopherNeural",
+      "description": "Southern American Male",
+      "category": "regional"
+    },
+    "success": true,
+    "reference_path": "voices/references/southern_male.wav",
+    "test_path": "voices/tests/southern_male_test.wav",
+    "duration": 4.31,
+    "rtf": 0.5701867720920359
+  },
+  {
+    "voice_id": "southern_female",
+    "config": {
+      "azure_voice": "en-US-AmberNeural",
+      "description": "Southern American Female",
+      "category": "regional"
+    },
+    "success": true,
+    "reference_path": "voices/references/southern_female.wav",
+    "test_path": "voices/tests/southern_female_test.wav",
+    "duration": 4.363333333333333,
+    "rtf": 0.570004727660107
+  },
+  {
+    "voice_id": "british_male",
+    "config": {
+      "azure_voice": "en-GB-RyanNeural",
+      "description": "British Male",
+      "category": "international"
+    },
+    "success": true,
+    "reference_path": "voices/references/british_male.wav",
+    "test_path": "voices/tests/british_male_test.wav",
+    "duration": 5.099333333333333,
+    "rtf": 0.5783910049396584
+  },
+  {
+    "voice_id": "british_female",
+    "config": {
+      "azure_voice": "en-GB-SoniaNeural",
+      "description": "British Female",
+      "category": "international"
+    },
+    "success": true,
+    "reference_path": "voices/references/british_female.wav",
+    "test_path": "voices/tests/british_female_test.wav",
+    "duration": 4.640666666666666,
+    "rtf": 0.5663272858762036
+  }
+]

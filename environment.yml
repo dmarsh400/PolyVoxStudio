@@ -1,0 +1,20 @@
+name: PolyVox
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip>=24
+  - ffmpeg
+  - libsndfile
+  - tesseract
+  - cairo
+  - pango
+  - pkg-config
+  - libpng
+  - zlib
+  - libxml2
+  - libxslt
+  - libffi
+  - openssl
+  - pip:
+      - -r requirements_min.txt
