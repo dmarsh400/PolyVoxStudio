@@ -127,15 +127,18 @@ def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
         r'\s+pp\.\s*\d+(?:\s+|$)',  # " pp. 123 "
         r'\s+-\s*\d+\s*-(?:\s+|$)',  # " - 123 - "
         r'\s+page\s+\d+(?:\s+|$)',  # " page 123 "
-        # Generic pattern: uppercase words followed by page number
-        # Matches patterns like "THE BRIGADE 123", "BOOK TITLE 45", etc.
-        r'\s+(?:[A-Z]+\s+){1,3}\d{1,3}(?:\s+|$)',
+        # Book title + page number: "TITLE 123" but NOT when in quotes or after punctuation
+        # Only match when it's clearly a header (at end of line after no other text)
+        r'\s+[A-Z]{2,}\s+\d{1,3}\s*$',  # "BRIGADE 123" at END of line only
     ]
 
-    # First, remove embedded page markers
+    # First, remove embedded page markers line by line to be more careful
     cleaned_text = text
     for pattern in embedded_patterns:
-        cleaned_text = re.sub(pattern, ' ', cleaned_text, flags=re.IGNORECASE)
+        if pattern.endswith('$'):  # Line-end pattern - use multiline
+            cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.MULTILINE)
+        else:  # Mid-line pattern
+            cleaned_text = re.sub(pattern, ' ', cleaned_text, flags=re.IGNORECASE)
 
     # Then handle standalone page numbers
     lines = cleaned_text.split('\n')
