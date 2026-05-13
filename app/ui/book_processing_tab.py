@@ -15,10 +15,12 @@ class BookProcessingTab(ctk.CTkFrame):
         self.current_book_path = None
         self.raw_text = ""
         self.chapters = []
+        self.font_size_threshold = 1.3  # Default threshold
 
         self.chapter_listbox = None
         self.chapter_preview = None
         self.status_label = None
+        self.threshold_dropdown = None
 
         self._build_layout()
 
@@ -42,6 +44,17 @@ class BookProcessingTab(ctk.CTkFrame):
 
         detect_button = ctk.CTkButton(button_frame, text="Detect Chapters", command=self._detect_chapters)
         detect_button.pack(side="left", padx=5)
+
+        # Font size threshold dropdown
+        tk.Label(button_frame, text="Font Sensitivity:").pack(side="left", padx=5)
+        self.threshold_dropdown = ctk.CTkComboBox(
+            button_frame,
+            values=["Conservative (1.5x)", "Balanced (1.3x)", "Sensitive (1.2x)"],
+            command=self._on_threshold_change,
+            width=150
+        )
+        self.threshold_dropdown.set("Balanced (1.3x)")  # Default
+        self.threshold_dropdown.pack(side="left", padx=5)
 
         send_button = ctk.CTkButton(button_frame, text="Send to Characters", command=self._send_to_characters)
         send_button.pack(side="left", padx=5)
@@ -177,15 +190,16 @@ class BookProcessingTab(ctk.CTkFrame):
 
         try:
             from app.core.chapter_chunker import smart_chapter_detection
-            
+
             self.update_status("Analyzing chapter structure...")
             self.master.update_idletasks()
-            
-            # Use smart chapter detection
+
+            # Use smart chapter detection with font size threshold
             detected = smart_chapter_detection(
                 self.raw_text,
                 min_chapter_length=1000,
-                max_chunk_size=50000  # 50K chars per chunk max
+                max_chunk_size=50000,  # 50K chars per chunk max
+                font_size_threshold=self.font_size_threshold
             )
             
             self.chapters = detected
@@ -214,6 +228,16 @@ class BookProcessingTab(ctk.CTkFrame):
         except Exception as e:
             self.log_debug(f"[BookProcessingTab] Chapter detection failed: {e}")
             messagebox.showerror("Error", f"Chapter detection failed:\n{e}")
+
+    def _on_threshold_change(self, value: str):
+        """Update font size threshold based on dropdown selection."""
+        if "1.5x" in value:
+            self.font_size_threshold = 1.5
+        elif "1.3x" in value:
+            self.font_size_threshold = 1.3
+        elif "1.2x" in value:
+            self.font_size_threshold = 1.2
+        self.log_debug(f"[BookProcessingTab] Font size threshold set to {self.font_size_threshold}x")
 
     def _on_chapter_select(self, event=None):
         if not self.chapter_listbox.curselection():

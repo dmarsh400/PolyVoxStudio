@@ -32,6 +32,7 @@ Pillow>=10.0.0
 beautifulsoup4>=4.12.0
 ebooklib>=0.18
 PyPDF2>=3.0.0
+pdfplumber>=0.9.0
 
 # Progress & Utilities
 tqdm>=4.65.0
