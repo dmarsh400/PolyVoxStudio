@@ -517,11 +517,28 @@ def detect_chapters(text: str, min_chapter_length: int = 100) -> List[Dict]:
             r"^((?:[IVX]{2,}|[IVX])[\.\-\:])\s*",
         ]
 
-        for pattern in patterns:
+        for pattern_idx, pattern in enumerate(patterns):
             match = re.match(pattern, s)  # Note: no flags, case-sensitive
             if match:
                 base = match.group(1)
                 rest = s[match.end():].strip()
+
+                # For single-letter Roman numerals (pattern 2, the third one), be strict
+                if pattern_idx == 2 and len(base) == 2:  # Single letter + punct like "X-"
+                    # Reject if followed by lowercase letter (not a title)
+                    if rest and rest[0].islower():
+                        continue  # Try next pattern
+                    # Reject if nothing meaningful follows
+                    if not rest or len(rest) < 3:
+                        # Only accept if it's just the marker (like "X." alone)
+                        if s in ("I.", "II.", "III.", "IV.", "V.", "VI.", "VII.", "VIII.", "IX.", "X.",
+                                "XI.", "XII.", "XIII.", "XIV.", "XV.", "XVI.", "XVII.", "XVIII.", "XIX.",
+                                "XX.", "XXI.", "XXII.", "XXIII.", "XXIV.", "XXV.", "XXVI.", "XXVII.",
+                                "XXVIII.", "XXIX.", "XXX.") or \
+                           s.startswith(("I. ", "II. ", "III. ", "IV. ", "V. ", "VI. ", "VII. ", "VIII. ",
+                                        "IX. ", "X. ", "XI. ", "XII. ")):
+                            return base
+                        continue  # Skip this match
 
                 # If nothing after marker, use the marker
                 if not rest:
