@@ -43,6 +43,8 @@ The one-click installer will:
 4. Installs PyTorch from the official wheel archive plus every dependency in `requirements_min.txt`.
 5. Downloads the `en_core_web_md` spaCy language model.
 
+If the exact PyTorch version for your Python build is unavailable (common with newer Python releases), the installer now retries with the latest compatible wheels for that runtime. If GPU wheels still fail, it automatically falls back to CPU wheels so setup can complete.
+
 ---
 
 ## Manual installation steps (PowerShell)
@@ -141,6 +143,7 @@ Ensure their installation directories are on your PATH before launching PolyVox 
 | `python` / `py` not recognized | Reinstall Python (64-bit) with "Add to PATH" enabled, or set `$env:PYTHON` to the desired interpreter. |
 | Script blocked by execution policy | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` or launch with `powershell -ExecutionPolicy Bypass -File install_windows.ps1`. |
 | PyTorch wheel download fails | Update NVIDIA drivers, temporarily disable VPN/firewall, or rerun and pick the CPU runtime. |
+| PyTorch wheel version not found during install | Re-run the installer. v2.5 now retries with compatible wheel versions automatically. |
 | pip reports SSL/proxy errors | Configure `%APPDATA%\pip\pip.ini` or set `$env:PIP_INDEX_URL` / `$env:HTTPS_PROXY` before running the installer. |
 | Missing FFmpeg/Tesseract warnings | Install the tools via winget/Chocolatey and restart PowerShell so the PATH refreshes. |
 
