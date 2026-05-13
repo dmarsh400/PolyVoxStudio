@@ -122,12 +122,14 @@ def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
     Handles both standalone page numbers and embedded page markers.
     """
     # Generic patterns to match common embedded page markers
-    # Works for any book, not specific titles
     embedded_patterns = [
         r'\s+p\.\s*\d+(?:\s+|$)',  # " p. 123 " or " p123 "
         r'\s+pp\.\s*\d+(?:\s+|$)',  # " pp. 123 "
         r'\s+-\s*\d+\s*-(?:\s+|$)',  # " - 123 - "
         r'\s+page\s+\d+(?:\s+|$)',  # " page 123 "
+        # Generic pattern: uppercase words followed by page number
+        # Matches patterns like "THE BRIGADE 123", "BOOK TITLE 45", etc.
+        r'\s+(?:[A-Z]+\s+){1,3}\d{1,3}(?:\s+|$)',
     ]
 
     # First, remove embedded page markers
