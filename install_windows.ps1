@@ -222,13 +222,40 @@ function Invoke-InEnv {
 function Install-Torch {
     param($Runtime)
     Write-Host "Installing PyTorch $($Runtime.TorchVersion) ($($Runtime.Suffix))" -ForegroundColor Green
-    Invoke-InEnv "pip" @(
-        "install",
-        "torch==$($Runtime.TorchVersion)+$($Runtime.Suffix)",
-        "torchvision==$($Runtime.TorchvisionVersion)+$($Runtime.Suffix)",
-        "torchaudio==$($Runtime.TorchaudioVersion)+$($Runtime.Suffix)",
-        "--index-url", $Runtime.Index
-    )
+    
+    # Try pinned versions first
+    $pythonExe = Join-Path $envDir "Scripts/python.exe"
+    & $pythonExe -m pip install `
+        "torch==$($Runtime.TorchVersion)+$($Runtime.Suffix)" `
+        "torchvision==$($Runtime.TorchvisionVersion)+$($Runtime.Suffix)" `
+        "torchaudio==$($Runtime.TorchaudioVersion)+$($Runtime.Suffix)" `
+        "--index-url" $Runtime.Index 2>&1 | Out-Null
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "⚠️ Exact PyTorch wheel set not available for this Python/runtime combination." -ForegroundColor Yellow
+        Write-Host "   Retrying with the latest compatible wheels from $($Runtime.Index)..." -ForegroundColor Yellow
+        
+        & $pythonExe -m pip install `
+            "torch" `
+            "torchvision" `
+            "torchaudio" `
+            "--index-url" $Runtime.Index 2>&1 | Out-Null
+        
+        if ($LASTEXITCODE -ne 0 -and $Runtime.Suffix -ne "cpu") {
+            Write-Host "⚠️ GPU wheel installation failed. Falling back to CPU wheels so setup can complete." -ForegroundColor Yellow
+            & $pythonExe -m pip install `
+                "torch" `
+                "torchvision" `
+                "torchaudio" `
+                "--index-url" "https://download.pytorch.org/whl/cpu" 2>&1 | Out-Null
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "❌ Unable to install PyTorch automatically for this environment. Try a different Python version (3.10/3.11 are safest) or re-run and select CPU mode." -ErrorAction Stop
+            }
+        } elseif ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ PyTorch installation failed. Check your Python version and try again." -ErrorAction Stop
+        }
+    }
 }
 
 function Install-Dependencies {
@@ -239,8 +266,10 @@ function Install-Dependencies {
 }
 
 function Show-Notes {
+    param($Runtime)
     Write-Host "`n✅ PolyVox environment ready!" -ForegroundColor Green
-    Write-Host "`nTo activate the environment in this shell:" -ForegroundColor Cyan
+    Write-Host "`nInstalled PyTorch runtime:`n  $($Runtime.Suffix) ($($Runtime.Index))`n" -ForegroundColor Cyan
+    Write-Host "To activate the environment in this shell:" -ForegroundColor Cyan
     Write-Host "  `"$envDir\Scripts\activate.ps1`"`n"
     Write-Host "Launch the UI with:`n  .\run_gui.bat" -ForegroundColor Cyan
     Write-Host "`nIf FFmpeg or Tesseract are missing, install them via:`n  winget install ffmpeg.ffmpeg`n  winget install UB-Mannheim.TesseractOCR" -ForegroundColor Yellow
@@ -265,4 +294,4 @@ New-Venv -PyCmd $pyCmd
 Invoke-InEnv "pip" @("install", "--upgrade", "pip", "setuptools", "wheel")
 Install-Torch -Runtime $runtime
 Install-Dependencies
-Show-Notes
+Show-Notes -Runtime $runtime
