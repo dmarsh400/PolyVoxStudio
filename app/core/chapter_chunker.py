@@ -121,16 +121,6 @@ def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
     Remove page numbers and common header/footer artifacts from text.
     Only removes lines that are clearly page artifacts, not content.
     """
-    # Patterns for page markers - only remove lines that match these exactly
-    page_marker_patterns = [
-        r'^\s*p\.\s*\d+\s*$',  # "p. 123"
-        r'^\s*pp\.\s*\d+\s*$',  # "pp. 123"
-        r'^\s*-\s*\d+\s*-\s*$',  # "- 123 -"
-        r'^\s*page\s+\d+\s*$',  # "page 123"
-        r'^\s*[A-Z]{2,}\s+\d{1,3}\s*$',  # "BRIGADE 123" (book title + page number)
-        r'^\s*\d{1,3}\s*$',  # Standalone page number
-    ]
-
     lines = text.split('\n')
     cleaned_lines = []
 
@@ -143,13 +133,29 @@ def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
 
         is_page_marker = False
 
-        # Check if line exactly matches a page marker pattern
+        # Check if this is clearly a page marker
+        # Patterns for standalone markers
+        page_marker_patterns = [
+            r'^\s*p\.\s*\d+\s*$',  # "p. 123"
+            r'^\s*pp\.\s*\d+\s*$',  # "pp. 123"
+            r'^\s*-\s*\d+\s*-\s*$',  # "- 123 -"
+            r'^\s*page\s+\d+\s*$',  # "page 123"
+            r'^\s*\d{1,3}\s*$',  # Standalone page number
+            # Multi-word book title followed by page number: "THE BRIGADE 123"
+            r'^(?:\s*[A-Z]+){2,}\s+\d{1,3}\s*$',  # Multi-word titles + number
+        ]
+
         for pattern in page_marker_patterns:
             if re.match(pattern, stripped, re.IGNORECASE):
                 is_page_marker = True
                 break
 
-        # Only skip if it's clearly a page marker, not regular content
+        # Remove mid-line page markers like "hunt THE BRIGADE 122 them"
+        # Only if line contains multi-word titles followed by numbers
+        if not is_page_marker and re.search(r'\s+[A-Z]+\s+[A-Z]+\s+\d{1,3}(?:\s+|$)', line):
+            # Replace embedded markers with space
+            line = re.sub(r'\s+[A-Z]+\s+[A-Z]+\s+\d{1,3}(?:\s+|$)', ' ', line, flags=re.IGNORECASE)
+
         if not is_page_marker:
             cleaned_lines.append(line)
 
