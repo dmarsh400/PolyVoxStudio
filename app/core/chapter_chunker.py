@@ -119,57 +119,65 @@ def _identify_page_numbers(text: str, page_info: List[Dict]) -> List[str]:
 def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
     """
     Remove page numbers and common header/footer artifacts from text.
-    Handles both standalone page numbers and embedded page markers.
+    Uses PDF layout positioning when available, plus regex patterns.
     """
-    # Generic patterns to match common embedded page markers
+    # First, identify footer text using position data from PDF
+    footer_words = set()
+    if page_info:
+        for page in page_info:
+            if "words" in page and "footer_zone" in page:
+                footer_top, footer_bottom = page["footer_zone"]
+                footer_zone_words = [w.get("text", "") for w in page["words"]
+                                    if w.get("top", 0) >= footer_top]
+                footer_words.update(footer_zone_words)
+
+    # Generic patterns for page markers
     embedded_patterns = [
         r'\s+p\.\s*\d+(?:\s+|$)',  # " p. 123 " or " p123 "
         r'\s+pp\.\s*\d+(?:\s+|$)',  # " pp. 123 "
         r'\s+-\s*\d+\s*-(?:\s+|$)',  # " - 123 - "
         r'\s+page\s+\d+(?:\s+|$)',  # " page 123 "
-        # Book title + page number: "TITLE 123" but NOT when in quotes or after punctuation
-        # Only match when it's clearly a header (at end of line after no other text)
-        r'\s+[A-Z]{2,}\s+\d{1,3}\s*$',  # "BRIGADE 123" at END of line only
+        r'\s+[A-Z]{2,}\s+\d{1,3}\s*$',  # "BRIGADE 123" at end of line
     ]
 
-    # First, remove embedded page markers line by line to be more careful
+    # Remove embedded page markers
     cleaned_text = text
     for pattern in embedded_patterns:
-        if pattern.endswith('$'):  # Line-end pattern - use multiline
+        if pattern.endswith('$'):  # Line-end pattern
             cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.MULTILINE)
         else:  # Mid-line pattern
             cleaned_text = re.sub(pattern, ' ', cleaned_text, flags=re.IGNORECASE)
 
-    # Then handle standalone page numbers
+    # Remove footer words that appear frequently (likely book title parts)
     lines = cleaned_text.split('\n')
     cleaned_lines = []
-    page_number_patterns = _identify_page_numbers(text, page_info)
 
     for line in lines:
         stripped = line.strip()
 
-        # Skip page numbers and common artifacts
         if not stripped:
             cleaned_lines.append(line)
             continue
 
         is_artifact = False
 
-        # Check if line looks like a page number
-        for pattern in page_number_patterns:
-            if re.match(pattern, stripped):
+        # Check if line is mostly footer words
+        words_in_line = stripped.split()
+        if words_in_line and footer_words:
+            footer_word_count = sum(1 for w in words_in_line if w in footer_words)
+            # If line is mostly footer words (>50%), skip it
+            if len(words_in_line) > 0 and footer_word_count / len(words_in_line) > 0.5:
                 is_artifact = True
-                break
 
-        # Skip very short lines that look like page numbers
-        if len(stripped) <= 4 and stripped.isdigit():
-            is_artifact = True
+        # Standard artifact checks
+        if not is_artifact:
+            # Skip very short lines that are just page numbers
+            if len(stripped) <= 4 and stripped.isdigit():
+                is_artifact = True
+            # Skip common header/footer text
+            elif re.match(r'^(chapter|part|book|page)\s+\d+$', stripped.lower()):
+                is_artifact = True
 
-        # Skip common header/footer text
-        if re.match(r'^(chapter|part|book|page)\s+\d+$', stripped.lower()):
-            is_artifact = True
-
-        # Skip lines that are just book title (common repeated header)
         if not is_artifact:
             cleaned_lines.append(line)
 
