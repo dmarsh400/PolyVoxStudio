@@ -118,9 +118,23 @@ def _identify_page_numbers(text: str, page_info: List[Dict]) -> List[str]:
 
 def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
     """
-    Remove page numbers and common header/footer artifacts.
+    Remove page numbers and common header/footer artifacts from text.
+    Handles both standalone page numbers and embedded page markers.
     """
-    lines = text.split('\n')
+    # Pattern to match embedded page markers like "THE BRIGADE 123", "p. 45", etc.
+    embedded_patterns = [
+        r'\s+THE\s+BRIGADE\s+\d+(?:\s+|$)',  # " THE BRIGADE 123 " or end of line
+        r'\s+p\.\s+\d+(?:\s+|$)',  # " p. 123 "
+        r'\s+pp\.\s+\d+(?:\s+|$)',  # " pp. 123 "
+    ]
+
+    # First, remove embedded page markers
+    cleaned_text = text
+    for pattern in embedded_patterns:
+        cleaned_text = re.sub(pattern, ' ', cleaned_text)
+
+    # Then handle standalone page numbers
+    lines = cleaned_text.split('\n')
     cleaned_lines = []
     page_number_patterns = _identify_page_numbers(text, page_info)
 
