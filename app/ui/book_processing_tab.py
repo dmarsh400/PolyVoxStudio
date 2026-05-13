@@ -230,7 +230,7 @@ class BookProcessingTab(ctk.CTkFrame):
             messagebox.showerror("Error", f"Chapter detection failed:\n{e}")
 
     def _on_threshold_change(self, value: str):
-        """Update font size threshold based on dropdown selection."""
+        """Update font size threshold and re-detect chapters if text is loaded."""
         if "1.5x" in value:
             self.font_size_threshold = 1.5
         elif "1.3x" in value:
@@ -238,6 +238,10 @@ class BookProcessingTab(ctk.CTkFrame):
         elif "1.2x" in value:
             self.font_size_threshold = 1.2
         self.log_debug(f"[BookProcessingTab] Font size threshold set to {self.font_size_threshold}x")
+
+        # Re-detect chapters if text is already loaded
+        if self.raw_text:
+            self._detect_chapters()
 
     def _on_chapter_select(self, event=None):
         if not self.chapter_listbox.curselection():
