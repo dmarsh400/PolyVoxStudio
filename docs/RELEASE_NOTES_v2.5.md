@@ -19,10 +19,22 @@ Release date: 2026-05-13
   - Falls back to CPU wheels automatically if GPU wheel installation fails.
   - Prints the final installed runtime/index in post-install notes.
 
+- `install_windows.ps1`
+  - Added fallback logic when pinned PyTorch wheels are unavailable for the selected runtime.
+  - Retries with latest compatible wheels from the selected PyTorch index.
+  - Falls back to CPU wheels automatically if GPU wheel installation fails.
+  - Prints the final installed runtime/index in post-install notes.
+
 ### Launcher reliability
 
 - `run_gui.sh`
   - Uses `PolyVox/bin/python` directly when the project environment exists.
+  - Prints active Python executable for transparent environment debugging.
+  - Checks for key dependencies (`PIL`, `spacy`, `torch`, `customtkinter`) before launch.
+  - Attempts automatic repair using `requirements_min.txt --upgrade` when dependencies are missing.
+
+- `run_gui.bat`
+  - Uses `PolyVox\Scripts\python.exe` directly (no environment activation script).
   - Prints active Python executable for transparent environment debugging.
   - Checks for key dependencies (`PIL`, `spacy`, `torch`, `customtkinter`) before launch.
   - Attempts automatic repair using `requirements_min.txt --upgrade` when dependencies are missing.
