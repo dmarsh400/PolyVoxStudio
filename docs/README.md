@@ -30,6 +30,13 @@ PolyVox Studio turns books into audiobooks with **distinct voices per character*
 
 Clone the repo and run the platform installer. Each script creates a `PolyVox` virtual environment, installs the right PyTorch wheel (CUDA 12.8, CUDA 12.1, CUDA 11.8, or CPU), and pulls the remaining dependencies.
 
+### 🆕 v2.5 install & startup improvements
+
+- Linux installer now retries with the latest compatible PyTorch wheels if pinned wheels are unavailable for your Python version.
+- Linux installer now falls back to CPU PyTorch automatically if GPU wheel install fails.
+- Linux launcher now uses the `PolyVox/bin/python` interpreter directly (prevents accidental use of base/conda Python).
+- Linux launcher now auto-checks core dependencies and attempts repair from `requirements_min.txt` when something is missing.
+
 ### 🐧 Linux (and advanced macOS setups)
 
 ```bash
@@ -59,8 +66,10 @@ You can also double-click `install_windows.bat` in Explorer. The batch file laun
 
 1) **Launch the app**
 ```bash
-./run_gui.sh          # Linux / macOS (within the PolyVox env)
+./run_gui.sh          # Linux / macOS
 ```
+
+On Linux, `run_gui.sh` automatically uses the local `PolyVox` environment if present and prints which Python executable is being used.
 
 ```powershell
 ./run_gui.bat        # Windows (double-click works too)
@@ -115,6 +124,8 @@ Both installers prompt for a PyTorch runtime. Pick the option that matches your 
 - **No characters detected:** Ensure the text uses standard `"` quotes; try processing 1–3 chapters.  
 - **GPU OOM or slow:** Lower batch size in Settings or rerun the installer with a different runtime (CUDA 11.8 or CPU) after updating drivers.  
 - **Audio cut-offs / robotic output:** Use higher-quality/longer (10–20 s) voice samples; check FFmpeg install.
+- **PyTorch wheel version not found during install:** Re-run the installer. v2.5 now retries with compatible wheel versions automatically.
+- **Launch uses wrong Python environment:** Use `./run_gui.sh` from the project root. v2.5 pins startup to the project interpreter and reports the active executable.
 
 ---
 

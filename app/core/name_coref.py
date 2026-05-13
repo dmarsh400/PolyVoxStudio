@@ -6,8 +6,10 @@ e.g., Tom, Tom Saywer, Mr. Tom Sawyer, Mr. Sawyer -> TOM SAYWER
 from collections import Counter
 import sys
 import itertools
-import pkg_resources
 import re
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 class NameCoref:
 
@@ -460,6 +462,6 @@ class NameCoref:
 
 if __name__ == "__main__":
 
-	aliasFile = pkg_resources.resource_filename(__name__, "data/aliases.txt")
+	aliasFile = str(DATA_DIR / "aliases.txt")
 	resolver=NameCoref(aliasFile)
 	resolver.process(sys.argv[1])

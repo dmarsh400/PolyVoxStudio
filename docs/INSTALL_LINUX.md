@@ -39,6 +39,8 @@ chmod +x install_linux.sh
 
 The script prompts you for the PyTorch runtime (CUDA 12.8 for RTX 50-series, CUDA 12.1, CUDA 11.8, or CPU-only), builds the `PolyVox` virtual environment in the project root, and installs everything defined in `requirements_min.txt`. It also downloads the `en_core_web_md` spaCy model automatically.
 
+If the exact PyTorch version for your Python build is unavailable (common with newer Python releases), the installer now retries with the latest compatible wheels for that runtime. If GPU wheels still fail, it automatically falls back to CPU wheels so setup can complete.
+
 ---
 
 ## Step-by-step walkthrough
@@ -50,7 +52,7 @@ The script prompts you for the PyTorch runtime (CUDA 12.8 for RTX 50-series, CUD
    ```
 
 2. **Select a PyTorch runtime**  
-   The prompt suggests CUDA 12.8 (RTX 50-series Blackwell, driver ≥ 570), CUDA 12.1 (most cards with driver ≥ 535), CUDA 11.8 (legacy GPUs, driver ≥ 520), or CPU-only. The installer pulls the matching `torch`, `torchvision`, and `torchaudio` wheels from the official PyTorch archive.
+   The prompt suggests CUDA 12.8 (RTX 50-series Blackwell, driver ≥ 570), CUDA 12.1 (most cards with driver ≥ 535), CUDA 11.8 (legacy GPUs, driver ≥ 520), or CPU-only. The installer first attempts the project-tested wheel versions, then automatically retries with compatible latest wheels when needed.
 
 3. **Core dependency install**  
    After PyTorch finishes, the script installs the rest of the stack from `requirements_min.txt` (Coqui XTTS, Transformers, spaCy, GUI/tooling utilities, etc.) and downloads the `en_core_web_md` model.
@@ -68,6 +70,8 @@ Activate the virtual environment and launch the GUI:
 source PolyVox/bin/activate
 ./run_gui.sh
 ```
+
+In v2.5, `run_gui.sh` will also detect and use `PolyVox/bin/python` directly when the environment exists, so launching from an active `base` conda shell will not override the project interpreter.
 
 You can deactivate the environment at any time with:
 
@@ -109,7 +113,9 @@ rm -rf PolyVox
 |---------|-----|
 | `python3: command not found` | Install Python (`sudo apt-get install python3 python3-venv`) or set `PYTHON=/path/to/python`. |
 | `ModuleNotFoundError: spacy` after install | Ensure you ran the installer to completion. It downloads the spaCy model; if interrupted, reactivate the env and run `python -m spacy download en_core_web_md`. |
-| PyTorch install fails with GPU wheel | Update to the latest NVIDIA driver (≥ 520 for CUDA 11.8, ≥ 535 for CUDA 12.1, ≥ 570 for CUDA 12.8) or re-run the installer and pick the CPU runtime. |
+| PyTorch install fails with GPU wheel | The installer now retries with newer compatible wheel versions and then CPU wheels. If it still fails, update NVIDIA drivers (≥ 520 for CUDA 11.8, ≥ 535 for CUDA 12.1, ≥ 570 for CUDA 12.8) or run with Python 3.10/3.11. |
+| `ModuleNotFoundError: PIL` on launch | Your env is incomplete (usually because installation stopped early). Re-run `./install_linux.sh` and let it finish. The launcher now reports missing modules before startup. |
+| Launcher uses wrong Python environment | Use `./run_gui.sh` from the project root. v2.5 forces the project interpreter (`PolyVox/bin/python`) when available. |
 | `ffmpeg` / `tesseract` missing at runtime | Install via your package manager (`sudo apt-get install ffmpeg tesseract-ocr`). |
 | Need to proxy pip installs | Export `PIP_INDEX_URL` / `HTTPS_PROXY` before running the script. |
 

@@ -20,9 +20,10 @@ from html import escape
 import time
 from pathlib import Path
 import urllib.request 
-import pkg_resources
 import torch
 import datetime
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
 # ---- Stats export for other modules ----
@@ -927,13 +928,13 @@ class EnglishBookNLP:
                     self.doQuoteAttrib=True
 
             tagsetPath="data/entity_cat.tagset"
-            tagsetPath = pkg_resources.resource_filename(__name__, tagsetPath)
+            tagsetPath = str(DATA_DIR / "entity_cat.tagset")
 
 
             if "referential_gender_hyperparameterFile" in model_params:
                 self.gender_hyperparameterFile=model_params["referential_gender_hyperparameterFile"]
             else:
-                self.gender_hyperparameterFile = pkg_resources.resource_filename(__name__, "data/gutenberg_prop_gender_terms.txt")
+                self.gender_hyperparameterFile = str(DATA_DIR / "gutenberg_prop_gender_terms.txt")
             
             pronominalCorefOnly=True
 
@@ -956,7 +957,7 @@ class EnglishBookNLP:
 
             if self.doEntities:
                 self.entityTagger=LitBankEntityTagger(self.entityPath, tagsetPath, device=device)
-                aliasPath = pkg_resources.resource_filename(__name__, "data/aliases.txt")
+                aliasPath = str(DATA_DIR / "aliases.txt")
                 self.name_resolver=NameCoref(aliasPath)
 
 

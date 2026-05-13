@@ -3,9 +3,11 @@ import torch
 import re
 import app.core.layered_reader as layered_reader
 import app.core.sequence_layered_reader as sequence_layered_reader
-import pkg_resources
 import os
+from pathlib import Path
 from app.core.gpu_manager import get_torch_device
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 class LitBankEntityTagger:
 	def __init__(self, model_file, model_tagset, task_id=None, device=None):
@@ -15,7 +17,7 @@ class LitBankEntityTagger:
 		print(f"[LitBankEntityTagger] Using device: {device}")
 		self.device = device
 		self.tagset=sequence_layered_reader.read_tagset(model_tagset)
-		supersenseTagset = pkg_resources.resource_filename(__name__, "data/supersense.tagset")
+		supersenseTagset = str(DATA_DIR / "supersense.tagset")
 
 		self.supersense_tagset=sequence_layered_reader.read_tagset(supersenseTagset)
 		base_model=re.sub("google_bert", "google/bert", os.path.basename(model_file))
@@ -28,7 +30,7 @@ class LitBankEntityTagger:
 		# Filter out unexpected keys
 		state_dict = {k: v for k, v in state_dict.items() if not k.startswith('bert.embeddings.position_ids')}
 		self.model.load_state_dict(state_dict)
-		wnsFile = pkg_resources.resource_filename(__name__, "data/wordnet.first.sense")
+		wnsFile = str(DATA_DIR / "wordnet.first.sense")
 		self.wns=self.read_wn(wnsFile)
 
 	def read_wn(self, filename):

@@ -9,6 +9,7 @@ ENV_NAME="PolyVox"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_DIR="${PROJECT_ROOT}/${ENV_NAME}"
 PYTHON_BIN="${PYTHON:-python3}"
+PYTHON_VERSION=""
 
 choose_torch_runtime() {
   cat <<'EOT'
@@ -59,6 +60,7 @@ ensure_python() {
   fi
   local version
   version="$("${PYTHON_BIN}" -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')"
+  PYTHON_VERSION="${version}"
   local major minor
   major="${version%%.*}"
   minor="${version##*.}"
@@ -88,13 +90,44 @@ activate_env() {
   python -m pip install --upgrade pip setuptools wheel
 }
 
-install_torch() {
-  echo "\n📦 Installing PyTorch ${TORCH_VERSION} (${TORCH_SUFFIX})"
+pip_install_torch_exact() {
   python -m pip install \
     "torch==${TORCH_VERSION}+${TORCH_SUFFIX}" \
     "torchvision==${TORCHVISION_VERSION}+${TORCH_SUFFIX}" \
     "torchaudio==${TORCHAUDIO_VERSION}+${TORCH_SUFFIX}" \
     --index-url "${TORCH_INDEX}"
+}
+
+pip_install_torch_latest() {
+  python -m pip install \
+    torch torchvision torchaudio \
+    --index-url "${TORCH_INDEX}"
+}
+
+install_torch() {
+  echo "\n📦 Installing PyTorch ${TORCH_VERSION} (${TORCH_SUFFIX}) for Python ${PYTHON_VERSION}"
+  if pip_install_torch_exact; then
+    return
+  fi
+
+  echo "⚠️  Exact PyTorch wheel set not available for this Python/runtime combination."
+  echo "   Retrying with the latest compatible wheels from ${TORCH_INDEX}..."
+  if pip_install_torch_latest; then
+    return
+  fi
+
+  if [ "${TORCH_SUFFIX}" != "cpu" ]; then
+    echo "⚠️  GPU wheel installation failed. Falling back to CPU wheels so setup can complete."
+    if python -m pip install torch torchvision torchaudio --index-url "https://download.pytorch.org/whl/cpu"; then
+      TORCH_SUFFIX="cpu"
+      TORCH_INDEX="https://download.pytorch.org/whl/cpu"
+      return
+    fi
+  fi
+
+  echo "❌ Unable to install PyTorch automatically for this environment." >&2
+  echo "   Try re-running with another runtime option or a different Python version (3.10/3.11 are safest)." >&2
+  exit 1
 }
 
 install_requirements() {
@@ -114,6 +147,9 @@ Activate manually with:
 
 Launch the UI with:
   ./run_gui.sh
+
+Installed PyTorch runtime:
+  ${TORCH_SUFFIX} (${TORCH_INDEX})
 
 If you haven't installed system packages yet, make sure ffmpeg and tesseract
 are available (Debian/Ubuntu example):

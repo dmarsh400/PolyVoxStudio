@@ -35,6 +35,7 @@ PyPDF2>=3.0.0
 
 # Progress & Utilities
 tqdm>=4.65.0
+setuptools>=68.0.0
 
 # Optional: For audio preview
 sounddevice>=0.4.6
