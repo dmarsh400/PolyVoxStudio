@@ -133,7 +133,16 @@ def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
 
         is_page_marker = False
 
-        # Check if this is clearly a page marker
+        # Quick check: if line is too long, it's probably not a page marker
+        if len(stripped) > 50:
+            # Just check for embedded markers in long lines
+            if 'BRIGADE' in line or 'TITLE' in line:
+                # Simple removal for book title + page number patterns
+                line = re.sub(r'\s+(?:THE\s+)?BRIGADE\s+\d{1,3}(?:\s|$)', ' ', line)
+            cleaned_lines.append(line)
+            continue
+
+        # Check if this is clearly a page marker (short lines only)
         # Patterns for standalone markers
         page_marker_patterns = [
             r'^\s*p\.\s*\d+\s*$',  # "p. 123"
@@ -141,20 +150,14 @@ def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
             r'^\s*-\s*\d+\s*-\s*$',  # "- 123 -"
             r'^\s*page\s+\d+\s*$',  # "page 123"
             r'^\s*\d{1,3}\s*$',  # Standalone page number
-            # Multi-word book title followed by page number: "THE BRIGADE 123"
-            r'^(?:\s*[A-Z]+){2,}\s+\d{1,3}\s*$',  # Multi-word titles + number
+            r'^\s*(?:THE\s+)?BRIGADE\s+\d{1,3}\s*$',  # "THE BRIGADE 123" or "BRIGADE 123"
+            r'^\s*[A-Z]+\s+[A-Z]+\s+\d{1,3}\s*$',  # Generic multi-word titles
         ]
 
         for pattern in page_marker_patterns:
             if re.match(pattern, stripped, re.IGNORECASE):
                 is_page_marker = True
                 break
-
-        # Remove mid-line page markers like "hunt THE BRIGADE 122 them"
-        # Only if line contains multi-word titles followed by numbers
-        if not is_page_marker and re.search(r'\s+[A-Z]+\s+[A-Z]+\s+\d{1,3}(?:\s+|$)', line):
-            # Replace embedded markers with space
-            line = re.sub(r'\s+[A-Z]+\s+[A-Z]+\s+\d{1,3}(?:\s+|$)', ' ', line, flags=re.IGNORECASE)
 
         if not is_page_marker:
             cleaned_lines.append(line)

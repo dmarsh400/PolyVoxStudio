@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 import os
+import threading
 
 
 class BookProcessingTab(ctk.CTkFrame):
@@ -144,44 +145,52 @@ class BookProcessingTab(ctk.CTkFrame):
             ]
         )
         if file_path:
-            try:
-                from app.core.chapter_chunker import load_book
-                
-                self.update_status(f"Loading: {os.path.basename(file_path)}...")
-                self.master.update_idletasks()  # Update UI to show loading message
-                
-                self.raw_text = load_book(file_path)
-                self.current_book_path = file_path
-                
-                file_name = os.path.basename(file_path)
-                file_size = len(self.raw_text)
-                size_kb = file_size / 1024
-                
-                self.update_status(f"Loaded: {file_name} ({size_kb:.1f} KB, {file_size:,} chars)")
-                self.chapters = []
-                self.update_chapter_list([])
-                self.update_preview(self.raw_text[:2000])
-                self.log_debug(f"[BookProcessingTab] Imported book: {file_path} ({size_kb:.1f} KB)")
-                
-                messagebox.showinfo(
-                    "Book Loaded", 
-                    f"Successfully loaded:\n{file_name}\n\n"
-                    f"Size: {size_kb:.1f} KB\n"
-                    f"Characters: {file_size:,}\n\n"
-                    f"Click 'Detect Chapters' to analyze structure."
-                )
-            except ImportError as e:
-                self.log_debug(f"[BookProcessingTab] Missing dependency: {e}")
-                messagebox.showerror(
-                    "Missing Dependency", 
-                    f"Cannot load this file format:\n{e}\n\n"
-                    f"Install required packages:\n"
-                    f"  • For EPUB: pip install ebooklib beautifulsoup4\n"
-                    f"  • For PDF: pip install PyPDF2"
-                )
-            except Exception as e:
-                self.log_debug(f"[BookProcessingTab] Failed to load file: {e}")
-                messagebox.showerror("Error", f"Failed to load file:\n{e}")
+            # Disable import button and show loading message
+            self.update_status(f"Loading: {os.path.basename(file_path)}...")
+            self.master.update_idletasks()
+
+            # Load book in background thread
+            thread = threading.Thread(target=self._load_book_thread, args=(file_path,))
+            thread.daemon = True
+            thread.start()
+
+    def _load_book_thread(self, file_path):
+        """Load book in background thread to prevent UI freezing."""
+        try:
+            from app.core.chapter_chunker import load_book
+
+            self.raw_text = load_book(file_path)
+            self.current_book_path = file_path
+
+            file_name = os.path.basename(file_path)
+            file_size = len(self.raw_text)
+            size_kb = file_size / 1024
+
+            self.update_status(f"Loaded: {file_name} ({size_kb:.1f} KB, {file_size:,} chars)")
+            self.chapters = []
+            self.update_chapter_list([])
+            self.update_preview(self.raw_text[:2000])
+            self.log_debug(f"[BookProcessingTab] Imported book: {file_path} ({size_kb:.1f} KB)")
+
+            self.master.after(0, lambda: messagebox.showinfo(
+                "Book Loaded",
+                f"Successfully loaded:\n{file_name}\n\n"
+                f"Size: {size_kb:.1f} KB\n"
+                f"Characters: {file_size:,}\n\n"
+                f"Click 'Detect Chapters' to analyze structure."
+            ))
+        except ImportError as e:
+            self.log_debug(f"[BookProcessingTab] Missing dependency: {e}")
+            self.master.after(0, lambda: messagebox.showerror(
+                "Missing Dependency",
+                f"Cannot load this file format:\n{e}\n\n"
+                f"Install required packages:\n"
+                f"  • For EPUB: pip install ebooklib beautifulsoup4\n"
+                f"  • For PDF: pip install PyPDF2"
+            ))
+        except Exception as e:
+            self.log_debug(f"[BookProcessingTab] Failed to load file: {e}")
+            self.master.after(0, lambda: messagebox.showerror("Error", f"Failed to load file:\n{e}"))
 
     def _detect_chapters(self):
         if not self.raw_text:
