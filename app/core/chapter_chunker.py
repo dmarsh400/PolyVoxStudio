@@ -119,37 +119,19 @@ def _identify_page_numbers(text: str, page_info: List[Dict]) -> List[str]:
 def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
     """
     Remove page numbers and common header/footer artifacts from text.
-    Uses PDF layout positioning when available, plus regex patterns.
+    Only removes lines that are clearly page artifacts, not content.
     """
-    # First, identify footer text using position data from PDF
-    footer_words = set()
-    if page_info:
-        for page in page_info:
-            if "words" in page and "footer_zone" in page:
-                footer_top, footer_bottom = page["footer_zone"]
-                footer_zone_words = [w.get("text", "") for w in page["words"]
-                                    if w.get("top", 0) >= footer_top]
-                footer_words.update(footer_zone_words)
-
-    # Generic patterns for page markers
-    embedded_patterns = [
-        r'\s+p\.\s*\d+(?:\s+|$)',  # " p. 123 " or " p123 "
-        r'\s+pp\.\s*\d+(?:\s+|$)',  # " pp. 123 "
-        r'\s+-\s*\d+\s*-(?:\s+|$)',  # " - 123 - "
-        r'\s+page\s+\d+(?:\s+|$)',  # " page 123 "
-        r'\s+[A-Z]{2,}\s+\d{1,3}\s*$',  # "BRIGADE 123" at end of line
+    # Patterns for page markers - only remove lines that match these exactly
+    page_marker_patterns = [
+        r'^\s*p\.\s*\d+\s*$',  # "p. 123"
+        r'^\s*pp\.\s*\d+\s*$',  # "pp. 123"
+        r'^\s*-\s*\d+\s*-\s*$',  # "- 123 -"
+        r'^\s*page\s+\d+\s*$',  # "page 123"
+        r'^\s*[A-Z]{2,}\s+\d{1,3}\s*$',  # "BRIGADE 123" (book title + page number)
+        r'^\s*\d{1,3}\s*$',  # Standalone page number
     ]
 
-    # Remove embedded page markers
-    cleaned_text = text
-    for pattern in embedded_patterns:
-        if pattern.endswith('$'):  # Line-end pattern
-            cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.MULTILINE)
-        else:  # Mid-line pattern
-            cleaned_text = re.sub(pattern, ' ', cleaned_text, flags=re.IGNORECASE)
-
-    # Remove footer words that appear frequently (likely book title parts)
-    lines = cleaned_text.split('\n')
+    lines = text.split('\n')
     cleaned_lines = []
 
     for line in lines:
@@ -159,26 +141,16 @@ def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
             cleaned_lines.append(line)
             continue
 
-        is_artifact = False
+        is_page_marker = False
 
-        # Check if line is mostly footer words
-        words_in_line = stripped.split()
-        if words_in_line and footer_words:
-            footer_word_count = sum(1 for w in words_in_line if w in footer_words)
-            # If line is mostly footer words (>50%), skip it
-            if len(words_in_line) > 0 and footer_word_count / len(words_in_line) > 0.5:
-                is_artifact = True
+        # Check if line exactly matches a page marker pattern
+        for pattern in page_marker_patterns:
+            if re.match(pattern, stripped, re.IGNORECASE):
+                is_page_marker = True
+                break
 
-        # Standard artifact checks
-        if not is_artifact:
-            # Skip very short lines that are just page numbers
-            if len(stripped) <= 4 and stripped.isdigit():
-                is_artifact = True
-            # Skip common header/footer text
-            elif re.match(r'^(chapter|part|book|page)\s+\d+$', stripped.lower()):
-                is_artifact = True
-
-        if not is_artifact:
+        # Only skip if it's clearly a page marker, not regular content
+        if not is_page_marker:
             cleaned_lines.append(line)
 
     return '\n'.join(cleaned_lines)
