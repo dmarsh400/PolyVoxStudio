@@ -121,17 +121,19 @@ def _remove_page_artifacts(text: str, page_info: List[Dict]) -> str:
     Remove page numbers and common header/footer artifacts from text.
     Handles both standalone page numbers and embedded page markers.
     """
-    # Pattern to match embedded page markers like "THE BRIGADE 123", "p. 45", etc.
+    # Generic patterns to match common embedded page markers
+    # Works for any book, not specific titles
     embedded_patterns = [
-        r'\s+THE\s+BRIGADE\s+\d+(?:\s+|$)',  # " THE BRIGADE 123 " or end of line
-        r'\s+p\.\s+\d+(?:\s+|$)',  # " p. 123 "
-        r'\s+pp\.\s+\d+(?:\s+|$)',  # " pp. 123 "
+        r'\s+p\.\s*\d+(?:\s+|$)',  # " p. 123 " or " p123 "
+        r'\s+pp\.\s*\d+(?:\s+|$)',  # " pp. 123 "
+        r'\s+-\s*\d+\s*-(?:\s+|$)',  # " - 123 - "
+        r'\s+page\s+\d+(?:\s+|$)',  # " page 123 "
     ]
 
     # First, remove embedded page markers
     cleaned_text = text
     for pattern in embedded_patterns:
-        cleaned_text = re.sub(pattern, ' ', cleaned_text)
+        cleaned_text = re.sub(pattern, ' ', cleaned_text, flags=re.IGNORECASE)
 
     # Then handle standalone page numbers
     lines = cleaned_text.split('\n')
