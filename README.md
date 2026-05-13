@@ -1,356 +1,201 @@
-# PolyVox Studio - PDF Chapter Detection & Processing
+<div align="center">
 
-Advanced PDF parsing and chapter detection for audiobook narration with intelligent formatting analysis and false-positive filtering.
+# 🎭 PolyVox Studio
+**Many voices, one story.**  
+Professional audiobook creation with AI character voices.
 
-## ✨ Features
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue)](https://www.python.org/downloads/)
+[![GPU Support](https://img.shields.io/badge/GPU-CUDA%2012.8%20%7C%2012.1%20%7C%2011.8%20%7C%20CPU-green)](GPU_COMPATIBILITY.md)
 
-### 📖 Smart Chapter Detection
-- **Multiple Detection Signals**: Combines text patterns, font size, and bold formatting
-- **Font-Size Analysis**: Detects chapters marked with larger fonts (configurable 1.2x, 1.3x, 1.5x thresholds)
-- **Bold Text Detection**: Identifies chapter headers marked with bold formatting
-- **Confidence Scoring**: Weighted multi-signal scoring (Text 30%, Font 35%, Bold 25%, Position 10%)
-- **Pattern Matching**: Supports all chapter label formats:
-  - Standard: "CHAPTER 1", "Chapter I", "Ch. 5"
-  - Roman Numerals: "I", "II.", "III)", with smart single-letter filtering
-  - Arabic Numbers: "1", "2.", "3)"
-  - Parts & Books: "PART 1", "Book II", "Volume Three"
-  - Named Sections: "Prologue", "Epilogue", "Introduction"
+<img src="docs/screenshots/main_interface.png" alt="PolyVox Studio UI" width="720"/>
 
-### 🛡️ False-Positive Filtering
-Three intelligent strategies to avoid false chapter detection:
-1. **Bankruptcy Context Filter**: Prevents "Chapter 11" in legal/bankruptcy discussions from being detected as actual chapters
-2. **Paragraph Boundary Detection**: Filters chapter markers found mid-paragraph
-3. **Duplicate Detection**: Merges or removes duplicate chapter markers
+</div>
 
-### 🧹 Page Cleanup
-- **Automatic Page Number Removal**: Detects and removes common formats (- 1 -, p.1, pp.1, THE BRIGADE 123, etc.)
-- **Book Title Removal**: Filters out repeated book titles and author names from footers
-- **Smart Artifact Detection**: Removes common PDF artifacts without affecting content
+---
 
-### ⚡ Performance
-- **Background Threading**: PDF extraction runs in background thread to prevent UI freezing
-- **Fast Processing**: Large PDFs (1.8M+ characters) load with responsive GUI
-- **Efficient Detection**: Chapter detection completes in ~8-10 seconds with formatting analysis
+## ✨ What is PolyVox Studio?
+PolyVox Studio turns books into audiobooks with **distinct voices per character**. It detects characters and dialogue, lets you assign voices (or clone your own), and renders polished audio via an intuitive desktop GUI.
 
-### 🎚️ Configurable Sensitivity
-Three preset font-size detection thresholds in the GUI:
-- **Conservative (1.5x)**: Fewer false positives, may miss subtle headers
-- **Balanced (1.3x)**: Default, good balance of detection and accuracy
-- **Sensitive (1.2x)**: Catches more headers, may include some non-chapter text
+**Highlights**
+- 🤖 Character & dialogue detection (BookNLP + heuristics)  
+- 🎤 Built-in voices & **voice cloning** (XTTS v2 / Coqui TTS)  
+- 🗂️ Chapter handling, line-level editing & attribution fixes  
+- ⚙️ GPU acceleration with selectable **CUDA 12.8 (RTX 50-series) / CUDA 12.1 / CUDA 11.8 / CPU** modes  
+- 🖥️ Modern CustomTkinter UI with progress & logs
 
-## 🚀 Quick Start
+---
 
-### Installation
+## 🚀 Installation
+
+Clone the repo and run the platform installer. Each script creates a `PolyVox` virtual environment, installs the right PyTorch wheel (CUDA 12.8, CUDA 12.1, CUDA 11.8, or CPU), and pulls the remaining dependencies.
+
+### 🆕 v2.5 install & startup improvements
+
+- Linux installer now retries with the latest compatible PyTorch wheels if pinned wheels are unavailable for your Python version.
+- Linux installer now falls back to CPU PyTorch automatically if GPU wheel install fails.
+- Linux launcher now uses the `PolyVox/bin/python` interpreter directly (prevents accidental use of base/conda Python).
+- Linux launcher now auto-checks core dependencies and attempts repair from `requirements_min.txt` when something is missing.
+
+### 🐧 Linux (and advanced macOS setups)
+
 ```bash
-# Activate virtual environment
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install pdfplumber for advanced PDF extraction
-pip install pdfplumber
+git clone https://github.com/dmarsh400/PolyVoxStudio.git
+cd PolyVoxStudio
+chmod +x install_linux.sh
+./install_linux.sh
 ```
 
-### Using the GUI
-1. Open PolyVox Studio
-2. Go to "Book Processing" tab
-3. Click "Import Book" and select your PDF
-4. (Optional) Select font sensitivity level before detecting chapters
-5. Click "Detect Chapters"
-6. Review detected chapters in the list
-7. Select 1-3 chapters and send to "Characters" tab
+The installer will prompt for your preferred GPU runtime. See [`INSTALL_LINUX.md`](INSTALL_LINUX.md) for prerequisites, optional system packages (FFmpeg/Tesseract), and troubleshooting tips.
 
-### Python API
-```python
-from app.core.chapter_chunker import load_book, smart_chapter_detection
+### 🪟 Windows (one click)
 
-# Load PDF with automatic cleanup
-text = load_book("book.pdf")
-
-# Detect chapters with font-size threshold
-chapters = smart_chapter_detection(
-    text,
-    min_chapter_length=1000,
-    max_chunk_size=50000,
-    font_size_threshold=1.3  # 1.2, 1.3, or 1.5
-)
-
-# Process results
-for chapter in chapters:
-    print(f"Title: {chapter['title']}")
-    print(f"Size: {len(chapter['text'])} chars")
+```powershell
+git clone https://github.com/dmarsh400/PolyVoxStudio.git
+cd PolyVoxStudio
+.\install_windows.bat
 ```
 
-## 📚 Processing Flow
+You can also double-click `install_windows.bat` in Explorer. The batch file launches PowerShell with execution-policy bypass, then runs the full installer. Detailed notes live in [`INSTALL_WINDOWS.md`](INSTALL_WINDOWS.md).
 
-```
-PDF File
-  ↓
-Extract with pdfplumber (preserves font metrics & layout)
-  ↓
-Remove page artifacts (numbers, titles, footers)
-  ↓
-Analyze formatting:
-  ├─ Font size relative to body text
-  ├─ Bold/strong font detection
-  └─ Text pattern matching
-  ↓
-Generate confidence scores for candidates
-  ├─ Font size prominence (35%)
-  ├─ Text pattern match (30%)
-  ├─ Bold status (25%)
-  └─ Position context (10%)
-  ↓
-Apply false-positive filters:
-  ├─ Bankruptcy context
-  ├─ Paragraph boundaries
-  └─ Duplicate detection
-  ↓
-Return ranked, verified chapters
-```
+> Need CPU-only? Choose the CPU option when prompted. Unsure which CUDA runtime to pick? Check the **GPU Support** section below.
 
-## 🔧 Advanced Configuration
+---
 
-### Minimum Chapter Length
-```python
-chapters = smart_chapter_detection(
-    text,
-    min_chapter_length=500  # Default: 1000
-)
-```
+## ⚡ Quick Start
 
-### Custom Font Threshold
-```python
-chapters = smart_chapter_detection(
-    text,
-    font_size_threshold=1.2  # Sensitive
-)
-```
-
-### Maximum Chapter Size
-```python
-chapters = smart_chapter_detection(
-    text,
-    max_chunk_size=75000  # Default: 50000 chars
-)
-```
-
-## 📊 Detection Examples
-
-### Example 1: Text Pattern Detection
-```
-Input: "CHAPTER 5: The Final Stand"
-Detection: Text pattern match (confidence 0.95)
-Result: ✓ Detected as chapter
-```
-
-### Example 2: Font-Size Detection
-```
-Input: Large 18pt text "Part IV" (body is 12pt)
-Font size factor: 18/12 = 1.5x (> 1.3x threshold)
-Detection: Font size prominence (confidence 0.85)
-Result: ✓ Detected as chapter
-```
-
-### Example 3: Bold Text Detection
-```
-Input: Bold text "- Introduction -"
-Detection: Bold formatting + position (confidence 0.72)
-Result: ✓ Detected as chapter
-```
-
-### Example 4: Bankruptcy False-Positive Filter
-```
-Input: "Chapter 11" in bankruptcy discussion context
-Surrounding text: "filed", "creditor", "court", "debtor"
-Detection: Text match but bankruptcy filter active
-Result: ✗ Filtered out (confidence reduced to 0.15)
-```
-
-## ⚙️ Implementation Details
-
-### Core Functions
-
-| Function | Purpose |
-|----------|---------|
-| `load_book()` | Entry point; loads any format (TXT, EPUB, PDF) with cleanup |
-| `_extract_pdf_with_pdfplumber()` | Advanced PDF extraction with font metrics |
-| `_extract_font_metrics()` | Analyzes character font sizes and names |
-| `_detect_chapters_by_font_size()` | Finds chapters by font size deviation |
-| `_detect_chapters_by_bold()` | Identifies bold text chapter headers |
-| `_filter_false_positives_bankruptcy()` | Removes bankruptcy-context false positives |
-| `_filter_false_positives_paragraph_boundary()` | Filters mid-paragraph markers |
-| `_filter_false_positives_duplicates()` | Merges duplicate detections |
-| `_merge_formatting_signals()` | Combines all signals with confidence scoring |
-| `detect_chapters_with_formatting()` | Main detection wrapper with all signals |
-| `smart_chapter_detection()` | Orchestrates full pipeline with user-selected threshold |
-
-### UI Components
-
-| Component | Location |
-|-----------|----------|
-| Book import with threading | `book_processing_tab.py:_import_book()` |
-| Font sensitivity dropdown | `book_processing_tab.py` button row |
-| Chapter list display | `book_processing_tab.py` left panel |
-| Chapter preview | `book_processing_tab.py` right panel |
-| Threshold selector | `book_processing_tab.py:_on_threshold_change()` |
-
-## 🧪 Testing
-
-### Run Test Suite
+1) **Launch the app**
 ```bash
-# Quick test of all features
-python test_chapter_detection.py
+./run_gui.sh          # Linux / macOS
 ```
 
-### Manual Testing
-1. Place your PDF in the project directory
-2. Open GUI and import the PDF
-3. Try all three font sensitivity levels
-4. Check that chapters are detected correctly
-5. Verify page numbers are removed from preview
+On Linux, `run_gui.sh` automatically uses the local `PolyVox` environment if present and prints which Python executable is being used.
 
-### Performance Testing
-```python
-import time
-from app.core.chapter_chunker import load_book, smart_chapter_detection
-
-start = time.time()
-text = load_book("large_book.pdf")
-load_time = time.time() - start
-
-start = time.time()
-chapters = smart_chapter_detection(text, font_size_threshold=1.3)
-detect_time = time.time() - start
-
-print(f"Load: {load_time:.1f}s, Detect: {detect_time:.1f}s")
+```powershell
+./run_gui.bat        # Windows (double-click works too)
 ```
 
-## 📋 File Structure
+2) **Book Processing**  
+**Import Book** → select `.txt` / `.pdf` / `.epub` → **Detect Chapters** → (optionally) select 1–3 chapters to process first for best attribution.
 
-```
-app/core/chapter_chunker.py         # Main detection module
-├─ _extract_pdf_with_pdfplumber()  # PDF extraction with metrics
-├─ _extract_font_metrics()          # Font analysis
-├─ _detect_chapters_by_font_size()  # Font-based detection
-├─ _detect_chapters_by_bold()       # Bold text detection
-├─ _filter_false_positives_*()      # Filter implementations
-├─ _merge_formatting_signals()      # Confidence scoring
-├─ detect_chapters_with_formatting()# Detection wrapper
-└─ smart_chapter_detection()        # Full pipeline
+3) **Characters**  
+Click **Detect Characters** → review/merge/rename characters → fix split/merged lines using split/merge tools.
 
-app/ui/book_processing_tab.py       # GUI integration
-├─ _import_book()                   # Book import with threading
-├─ _load_book_thread()              # Background load thread
-├─ _detect_chapters()               # Detection trigger
-├─ _on_threshold_change()           # Threshold selector
-└─ Font sensitivity dropdown        # UI control
+4) **Voices**  
+**Refresh Characters** → assign built-in voices or **Clone Voice** using a clean 6–20 s sample → **Send to Audio Processing**.
 
-CHAPTER_DETECTION_IMPROVEMENTS.md   # Technical documentation
-README.md                           # This file
-```
+5) **Audio Processing**  
+Select chapters/batches → choose output (defaults to `/output/audio`) → **Export** (per-chapter or **M4B** full audiobook).
 
-## 🐛 Troubleshooting
+> Tip: Start with a few chapters to dial in detection & voices, then run the whole book.
 
-### Issue: "Program freezes when loading PDF"
-**Solution**: Applies only to very large PDFs (1MB+). Uses background threading to keep UI responsive. Progress message shows "Loading: filename...".
+---
 
-### Issue: "Page numbers still showing in chapters"
-**Solution**: The cleanup catches common patterns. For unusual formats:
-1. Check the debug output for what was detected
-2. Create an issue with a sample of the page number format
-3. Manual removal is available by editing chapters in the GUI
+## 🖥️ GPU Support & Decision Guide
 
-### Issue: "Not detecting all chapters"
-**Solution**: Try different sensitivity levels:
-- Sensitive (1.2x) - catches more headers
-- Balanced (1.3x) - recommended default
-- Conservative (1.5x) - fewer false positives
+Both installers prompt for a PyTorch runtime. Pick the option that matches your hardware:
 
-### Issue: "False positives (e.g., 'Chapter 11' in legal docs)"
-**Solution**: The bankruptcy filter is active by default. If "Chapter 11" is a real chapter:
-- Check surrounding text doesn't contain bankruptcy keywords
-- Try Sensitive (1.2x) threshold which weights text patterns higher
-- Or manually adjust detected chapters in the GUI
+| GPU Series / Setup           | Runtime choice in installer | Notes |
+|------------------------------|-----------------------------|-------|
+| RTX 50-series (Blackwell)    | **CUDA 12.8**               | Required for GB202/GB203 (RTX 5090/5080/5070/5060); driver ≥ 570 |
+| RTX 40 / 30 / 20, GTX 16     | **CUDA 12.1**               | Latest features and fastest inference |
+| RTX 10 / GTX 10 & older RTX  | **CUDA 11.8**               | Best fit for earlier CUDA-capable cards |
+| No NVIDIA GPU / Virtualized  | **CPU only**                | Works everywhere (slower) |
 
-### Issue: "pdfplumber not found"
-**Solution**:
+**Driver baseline (NVIDIA):** Ensure your driver supports the selected CUDA version (≥ 520 for CUDA 11.8, ≥ 535 for CUDA 12.1, ≥ 570 for CUDA 12.8). If in doubt, choose CPU to finish the install, then upgrade drivers and rerun the installer later.
+
+---
+
+## 🧩 Requirements
+
+**Minimum**
+- Python **3.9+**  
+- Windows 10+/Ubuntu 20.04+/macOS 11+  
+- 8 GB RAM (16 GB recommended)  
+- Optional NVIDIA GPU (see table above)
+
+**Nice to have**
+- FFmpeg in PATH for audio enhancement/export niceties.
+
+---
+
+## 🔧 Troubleshooting (fast fixes)
+
+- **No characters detected:** Ensure the text uses standard `"` quotes; try processing 1–3 chapters.  
+- **GPU OOM or slow:** Lower batch size in Settings or rerun the installer with a different runtime (CUDA 11.8 or CPU) after updating drivers.  
+- **Audio cut-offs / robotic output:** Use higher-quality/longer (10–20 s) voice samples; check FFmpeg install.
+- **PyTorch wheel version not found during install:** Re-run the installer. v2.5 now retries with compatible wheel versions automatically.
+- **Launch uses wrong Python environment:** Use `./run_gui.sh` from the project root. v2.5 pins startup to the project interpreter and reports the active executable.
+
+---
+
+## 🛡️ Hallucination Guard (optional)
+
+PolyVox can now self-check XTTS lines before finalizing them. The guard synthesizes a segment, transcribes it with Whisper (prefers `faster-whisper`), and compares the transcript with the expected text. If the similarity drops below a threshold, it can retry—falling back to the deterministic XTTS preset on later attempts.
+
+**Enable it** by exporting an environment variable before launching the app:
+
 ```bash
-source .venv/bin/activate
-pip install pdfplumber
-python -c "import pdfplumber; print('✓ Ready')"
+export POLYVOX_TTS_GUARD=on
 ```
 
-## 📈 Performance Metrics
+Available modes:
 
-| Metric | Value |
-|--------|-------|
-| PDF extraction (1.8MB PDF) | ~59 seconds |
-| Page cleanup | ~0.02 seconds |
-| Chapter detection (1.3x) | ~8-10 seconds |
-| Total pipeline | ~68 seconds |
-| **UI remains responsive** | ✓ (background threading) |
+- `on` / `true` — guard every XTTS line.
+- `auto` *(default)* — guard narrator lines only.
+- `narrator` — identical to `auto`, explicit for readability.
+- `off` / `false` — disable the guard entirely.
 
-## 🔒 Confidence Scoring Details
+Fine-tune behavior with optional overrides:
 
-### Score Components
-```
-Total Score = (Font 0.35) + (Text 0.30) + (Bold 0.25) + (Position 0.10)
-
-Range: 0.0 - 1.0
-Decision: Score >= 0.6 = Accept as chapter
+```bash
+export POLYVOX_TTS_GUARD_THRESHOLD=0.9      # similarity target (0..1)
+export POLYVOX_TTS_GUARD_RETRIES=2          # additional attempts if under threshold
+export POLYVOX_TTS_GUARD_MODEL=base         # Whisper size: base, small, medium, etc.
 ```
 
-### Adjustment Factors
-- Bankruptcy filter: -0.5 confidence
-- Mid-paragraph: -0.3 confidence
-- Duplicate: merge/consolidate
+Voice definitions (e.g., JSON entries) can opt in/out per character using:
 
-## 🎯 Known Limitations
+- `"hallucination_guard": true | false`
+- `"guard_threshold": 0.88`
+- `"guard_max_retries": 2`
+- `"guard_model_size": "base.en"`
 
-1. **Image-based PDFs**: Cannot process scanned PDFs (requires OCR)
-2. **Complex Layouts**: Multi-column documents may extract imperfectly
-3. **Custom Formats**: Very unusual page numbering formats may not be detected
-4. **Language**: Patterns optimized for English
+> Dependencies: install `faster-whisper` and `rapidfuzz` for the fast path. The guard falls back gracefully if the packages are missing.
 
-## 🔮 Future Enhancements
+---
 
-- [ ] OCR support for scanned PDFs
-- [ ] Multi-column document handling
-- [ ] Custom pattern configuration UI
-- [ ] Language-specific detection rules
-- [ ] Chapter confidence visualization in GUI
-- [ ] Custom false-positive rules editor
+## �📚 Documentation
 
-## 📝 Recent Changes
+- **Linux Installation Guide** — prerequisites, installer walkthrough, troubleshooting  
+  → `INSTALL_LINUX.md`
+- **Windows Installation Guide** — one-click batch installer and manual PowerShell steps  
+  → `INSTALL_WINDOWS.md`
+- **GPU Compatibility Guide** — supported cards, drivers, and runtime recommendations  
+  → `GPU_COMPATIBILITY.md`
+- **Contributing guide** — dev setup, testing, PR flow  
+  → `CONTRIBUTING.md`
+- **PDF Chapter Detection Guide** — font-size analysis, formatting detection, false-positive filtering  
+  → `PDF_CHAPTER_DETECTION.md`
 
-### v2.0 - Enhanced PDF Detection
-- ✅ Font-size based chapter detection
-- ✅ Bold text detection
-- ✅ Bankruptcy context filtering
-- ✅ Paragraph boundary filtering
-- ✅ Duplicate detection filtering
-- ✅ Confidence scoring system
-- ✅ Configurable sensitivity thresholds (1.2x, 1.3x, 1.5x)
-- ✅ Auto-detection on threshold change
-- ✅ Background threading for UI responsiveness
-- ✅ Page number and artifact removal improvements
+---
 
-## 📄 License
+## 📖 PDF Chapter Detection (v2.0)
 
-See LICENSE file for details.
+PolyVox now includes **advanced PDF chapter detection** with:
+- 🔤 Font-size detection (configurable 1.2x, 1.3x, 1.5x sensitivity)
+- **🔨 Bold text detection** for chapter headers  
+- 🛡️ False-positive filtering (bankruptcy context, paragraph boundaries, duplicates)
+- ⚡ Background threading prevents UI freezing on large PDFs
+
+👉 **[Full PDF Chapter Detection guide →](PDF_CHAPTER_DETECTION.md)**
+
+---
 
 ## 🤝 Contributing
+PRs welcome! See **CONTRIBUTING.md** for style, tests, and PR checklist.
 
-To report issues with PDF detection:
+---
 
-1. Export the problematic PDF
-2. Note what went wrong (missing chapters, false positives, page numbers, etc.)
-3. Create an issue with the PDF format details
-4. Include sample of the content that wasn't detected correctly
-
-## 📞 Support
-
-For questions or issues:
-1. Check this README and CHAPTER_DETECTION_IMPROVEMENTS.md
-2. Review debug output in the GUI or console
-3. Try different sensitivity thresholds
-4. Create a GitHub issue with details
+## 📜 License
+MIT — see `LICENSE`.
