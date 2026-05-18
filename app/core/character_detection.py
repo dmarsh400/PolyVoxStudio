@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ BOOKNLP_PIPELINE = "entity,quote,coref"
 BOOKNLP_MODEL_DEFAULT = "english"
 CACHE_ROOT = Path(__file__).resolve().parents[2] / ".polyvox_tmp" / "booknlp_cache"
 CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+CACHE_FORMAT_VERSION = "v2"
 
 QUOTE_TOGGLE_CHARS = {"\"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}
 QUOTE_TOGGLE_CHARS.update({"\"", "", "", "", "", "", ""})  # defensive duplicates
@@ -531,7 +533,49 @@ def _contextual_speaker(
         speaker = _extract_speaker_from_text(text, alias_to_id, id_to_display, characters)
         if speaker:
             return speaker
+
+    # Fallback: if surrounding narration mentions exactly one known character name,
+    # use that as the likely speaker for nearby unresolved quotes.
+    mention_scores: Dict[str, int] = {}
+    for text in surrounding_texts:
+        if not text:
+            continue
+        haystack = _normalize_whitespace(text).lower()
+        if not haystack:
+            continue
+
+        for cid, display in id_to_display.items():
+            if not display or display in {"Narrator", "Unknown"}:
+                continue
+            variants = {display}
+            meta = characters.get(str(cid)) or characters.get(cid)
+            if isinstance(meta, dict):
+                canonical = meta.get("canonical_name") or meta.get("normalized_name")
+                if canonical:
+                    variants.add(str(canonical))
+
+            for variant in variants:
+                candidate = _normalize_whitespace(str(variant)).strip()
+                if not candidate:
+                    continue
+                if re.search(rf"\b{re.escape(candidate.lower())}\b", haystack):
+                    mention_scores[display] = mention_scores.get(display, 0) + len(candidate.split())
+
+    if len(mention_scores) == 1:
+        return next(iter(mention_scores.keys()))
+    if mention_scores:
+        ranked = sorted(mention_scores.items(), key=lambda kv: kv[1], reverse=True)
+        if len(ranked) == 1 or ranked[0][1] > ranked[1][1]:
+            return ranked[0][0]
     return None
+
+
+def _looks_first_person_quote(text: str) -> bool:
+    if not text:
+        return False
+    t = text.lower()
+    # First-person signals for books where the POV character is also a speaker.
+    return bool(re.search(r"\b(i|me|my|mine|myself|i'm|i've|i'd|i'll)\b", t))
 
 
 def _assign_speaker_to_previous_quote(rows: List[Dict[str, object]], speaker: Optional[str]) -> None:
@@ -542,6 +586,210 @@ def _assign_speaker_to_previous_quote(rows: List[Dict[str, object]], speaker: Op
             continue
         row["speaker"] = speaker
         return
+
+
+def _apply_turn_taking_heuristic(rows: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    """
+    Fill some short Unknown quote lines using conservative A/B alternation.
+
+    Heuristic triggers only when:
+    - the current row is an Unknown quote,
+    - the quote is short (dialogue turn-like), and
+    - surrounding quote speakers provide strong turn-taking evidence.
+    """
+    if not rows:
+        return rows
+
+    quote_indices = [i for i, r in enumerate(rows) if r.get("is_quote")]
+    if not quote_indices:
+        return rows
+
+    def _quote_len_ok(text: str) -> bool:
+        if not text:
+            return False
+        words = len(re.findall(r"[A-Za-z0-9']+", text))
+        return words <= 18
+
+    def _speaker_at_quote_pos(qpos: int) -> Optional[str]:
+        if qpos < 0 or qpos >= len(quote_indices):
+            return None
+        speaker = rows[quote_indices[qpos]].get("speaker")
+        if not isinstance(speaker, str):
+            return None
+        if speaker in {"Unknown", "Narrator"}:
+            return None
+        return speaker
+
+    for qpos, row_idx in enumerate(quote_indices):
+        row = rows[row_idx]
+        speaker = row.get("speaker")
+        if speaker != "Unknown" or not row.get("is_quote"):
+            continue
+
+        text = str(row.get("text") or "")
+        if not _quote_len_ok(text):
+            continue
+
+        prev1 = _speaker_at_quote_pos(qpos - 1)
+        prev2 = _speaker_at_quote_pos(qpos - 2)
+        next1 = _speaker_at_quote_pos(qpos + 1)
+
+        # Pattern: A, B, Unknown -> choose A (alternating turns)
+        if prev1 and prev2 and prev1 != prev2:
+            row["speaker"] = prev2
+            continue
+
+        # Pattern: A, Unknown, A with earlier B -> Unknown is likely B
+        if prev1 and next1 and prev1 == next1 and prev2 and prev2 != prev1:
+            row["speaker"] = prev2
+            continue
+
+    return rows
+
+
+def _infer_main_character(
+    rows: List[Dict[str, object]],
+    id_to_display: Dict[str, str],
+    characters: Dict[str, Dict[str, object]],
+    first_person_narration: bool,
+) -> Dict[str, object]:
+    """
+    Infer likely protagonist/main POV character.
+
+    Returns:
+      {
+        "name": Optional[str],
+        "confidence": float,
+        "reason": str,
+        "candidates": [{"name": str, "score": float}]
+      }
+    """
+    quote_counts: Dict[str, int] = Counter()
+    narration_counts: Dict[str, int] = Counter()
+    addressed_counts: Dict[str, int] = Counter()
+    unknown_quotes = 0
+    total_quotes = 0
+
+    def _candidate_variants(name: str, cid: str) -> List[str]:
+        variants = []
+        if name:
+            variants.append(name)
+        meta = characters.get(str(cid), {}) if isinstance(characters, dict) else {}
+        for key in ("canonical_name", "normalized_name"):
+            value = meta.get(key)
+            if value:
+                variants.append(str(value))
+        deduped = []
+        for item in variants:
+            if item not in deduped:
+                deduped.append(item)
+        return deduped
+
+    for row in rows or []:
+        speaker = row.get("speaker")
+        text = str(row.get("text") or "")
+
+        if row.get("is_quote"):
+            total_quotes += 1
+            if not isinstance(speaker, str) or speaker in {"Unknown", "Narrator"}:
+                unknown_quotes += 1
+            else:
+                quote_counts[speaker] += 1
+
+            lowered_quote = text.lower()
+            for cid, display in (id_to_display or {}).items():
+                if not display or display in {"Unknown", "Narrator"}:
+                    continue
+                for variant in _candidate_variants(display, cid):
+                    if not variant:
+                        continue
+                    if re.search(rf"\b{re.escape(str(variant).lower())}\b", lowered_quote):
+                        addressed_counts[display] += 1
+                        break
+        elif speaker == "Narrator" and text:
+            lowered = text.lower()
+            for cid, display in (id_to_display or {}).items():
+                if not display or display in {"Unknown", "Narrator"}:
+                    continue
+                for variant in _candidate_variants(display, cid):
+                    if not variant:
+                        continue
+                    if re.search(rf"\b{re.escape(str(variant).lower())}\b", lowered):
+                        narration_counts[display] += 1
+                        break
+
+    # Build candidate metadata from BookNLP character payload
+    candidates: Dict[str, Dict[str, float]] = {}
+    for cid, display in (id_to_display or {}).items():
+        if not display or display in {"Unknown", "Narrator"}:
+            continue
+        meta = characters.get(str(cid), {}) if isinstance(characters, dict) else {}
+        mention_count = 0
+        try:
+            mention_count = int(meta.get("mention_count", 0))
+        except Exception:
+            mention_count = 0
+
+        narration_mentions = float(narration_counts.get(display, 0))
+        quote_mentions = float(quote_counts.get(display, 0))
+        addressed_mentions = float(addressed_counts.get(display, 0))
+        score = (
+            narration_mentions * 4.0
+            + addressed_mentions * 6.0
+            + quote_mentions * 1.5
+            + float(mention_count)
+        )
+
+        # In first-person books, the protagonist is often the most-addressed name in dialogue.
+        unknown_ratio = (unknown_quotes / total_quotes) if total_quotes else 0.0
+        if first_person_narration:
+            score += addressed_mentions * 2.0
+            score += narration_mentions * 1.5
+            if unknown_ratio >= 0.4:
+                score += float(mention_count) * 0.25
+
+        # Soft penalty for obvious non-person labels.
+        if display.lower().startswith("the "):
+            score *= 0.8
+
+        candidates[display] = {
+            "score": score,
+            "mention_count": float(mention_count),
+            "quote_count": quote_mentions,
+            "narration_count": narration_mentions,
+            "addressed_count": addressed_mentions,
+        }
+
+    if not candidates:
+        return {
+            "name": None,
+            "confidence": 0.0,
+            "reason": "No suitable character candidates available.",
+            "candidates": [],
+        }
+
+    ranked = sorted(candidates.items(), key=lambda kv: kv[1]["score"], reverse=True)
+    best_name, best_stats = ranked[0]
+    second_score = ranked[1][1]["score"] if len(ranked) > 1 else 0.0
+    margin = max(0.0, best_stats["score"] - second_score)
+    confidence = 0.5
+    if best_stats["score"] > 0:
+        confidence = min(0.95, 0.55 + (margin / (best_stats["score"] + 1.0)))
+
+    reason = (
+        f"Selected by combined mention+dialogue score "
+        f"(narration={int(best_stats['narration_count'])}, addressed={int(best_stats['addressed_count'])}, quotes={int(best_stats['quote_count'])}, mentions={int(best_stats['mention_count'])})."
+    )
+
+    return {
+        "name": best_name,
+        "confidence": round(float(confidence), 3),
+        "reason": reason,
+        "candidates": [
+            {"name": name, "score": round(float(stats["score"]), 3)}
+            for name, stats in ranked[:5]
+        ],
+    }
 
 def _fallback_speaker_label(raw: str) -> Optional[str]:
     cleaned = _clean_surface(raw)
@@ -624,19 +872,26 @@ class _BookNLPDetector:
             self._booknlp = EnglishBookNLP(params)
         return self._booknlp
 
-    def process(self, text: str, chapter_title: Optional[str]) -> Tuple[Path, str]:
+    def process(self, text: str, chapter_title: Optional[str], force_reprocess: bool = False) -> Tuple[Path, str]:
         slug = _safe_slug(chapter_title)
         digest = _hash_text(text)[:12]
-        prefix = f"{slug}_{digest}"
+        prefix = f"{slug}_{digest}_{CACHE_FORMAT_VERSION}"
         out_dir = CACHE_ROOT / prefix
         book_path = out_dir / f"{prefix}.book.txt"
 
+        if force_reprocess and out_dir.exists():
+            print(f"[CharacterDetection] Forcing fresh BookNLP run: {prefix}")
+            shutil.rmtree(out_dir, ignore_errors=True)
+
         if not book_path.exists():
+            print(f"[CharacterDetection] BookNLP cache MISS: {prefix}")
             out_dir.mkdir(parents=True, exist_ok=True)
             input_path = out_dir / f"{prefix}.txt"
             input_path.write_text(text, encoding="utf-8")
             pipeline = self._ensure_pipeline()
             pipeline.process(str(input_path), str(out_dir), prefix)
+        else:
+            print(f"[CharacterDetection] BookNLP cache HIT: {prefix}")
 
         return out_dir, prefix
 
@@ -1045,11 +1300,15 @@ def run_attribution(
     title: Optional[str] = None,
     model: str = BOOKNLP_MODEL_DEFAULT,
     max_lines: Optional[int] = None,
+    force_reprocess: bool = False,
 ) -> Dict[str, object]:
     detector = _get_detector(model)
+    first_person_narration = bool(
+        re.search(r"\b(i|me|my|mine|myself|i'm|i've|i'd|i'll)\b", (text or "").lower())
+    )
 
     try:
-        out_dir, prefix = detector.process(text, title)
+        out_dir, prefix = detector.process(text, title, force_reprocess=force_reprocess)
     except Exception:
         fallback = DetectionOutput(
             lines=[{"speaker": "Narrator", "text": text.strip(), "is_quote": False}],
@@ -1126,6 +1385,11 @@ def run_attribution(
             base_speaker: Optional[str] = None
             if isinstance(char_id, int) and char_id >= 0:
                 base_speaker = id_to_display.get(str(char_id))
+                # BookNLP frequently uses char_id=0 for dominant POV speakers; that id
+                # can be filtered from character JSON. In first-person chapters, map it
+                # to Narrator rather than leaving many lines as Unknown.
+                if not base_speaker and char_id == 0 and first_person_narration:
+                    base_speaker = "Narrator"
 
             if not base_speaker:
                 mention = segment.get("mention")
@@ -1173,6 +1437,11 @@ def run_attribution(
                 if not speaker_for_piece:
                     speaker_for_piece = base_speaker or "Unknown"
 
+                # Guarded fallback for first-person POV novels:
+                # unresolved quotes with strong first-person language default to Narrator.
+                if speaker_for_piece == "Unknown" and first_person_narration and _looks_first_person_quote(piece_text):
+                    speaker_for_piece = "Narrator"
+
                 rows.append({
                     "speaker": speaker_for_piece,
                     "text": piece_text,
@@ -1182,6 +1451,9 @@ def run_attribution(
         rows = _merge_adjacent_narration(rows)
     else:
         rows, parsed_order = _parse_book_rows(book_path, normalize)
+
+    rows = _apply_turn_taking_heuristic(rows)
+
     if max_lines and max_lines > 0:
         rows = rows[:max_lines]
 
@@ -1213,7 +1485,14 @@ def run_attribution(
         character_order=order,
         characters=characters_payload,
     )
-    return result.as_dict()
+    payload = result.as_dict()
+    payload["main_character_inference"] = _infer_main_character(
+        rows,
+        id_to_display=id_to_display,
+        characters=characters,
+        first_person_narration=first_person_narration,
+    )
+    return payload
 
 
 def attribute_dialogue(text: str, use_spacy: bool = False, **kwargs):

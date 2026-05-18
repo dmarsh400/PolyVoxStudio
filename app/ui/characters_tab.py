@@ -3,6 +3,7 @@ from tkinter import messagebox, simpledialog, ttk
 import customtkinter as ctk
 import random
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -180,6 +181,7 @@ class CharactersTab(ctk.CTkFrame):
         self.line_vars = []
         self._text_labels = []  # Store references to text labels for dynamic resizing
         self.last_run_export = None
+        self.main_character_override = None
 
         self.narrator_color = "#555555"
         
@@ -1215,7 +1217,11 @@ class CharactersTab(ctk.CTkFrame):
         for i, chapter in enumerate(self.chapters):
             text = chapter.get("text", "")
             title = chapter.get("title")
-            detection = character_detection.run_attribution(text, title=title)
+            detection = character_detection.run_attribution(
+                text,
+                title=title,
+                force_reprocess=True,
+            )
 
             lines = detection.get("lines", []) if isinstance(detection, dict) else []
             order = detection.get("character_order", []) if isinstance(detection, dict) else []
@@ -1225,6 +1231,7 @@ class CharactersTab(ctk.CTkFrame):
             chapter["character_order"] = order
             chapter["characters_meta"] = metadata
             chapter["detection_raw"] = detection
+            chapter["main_character_inference"] = detection.get("main_character_inference", {}) if isinstance(detection, dict) else {}
 
             run_payload["chapters"].append({
                 "index": i,
@@ -1234,6 +1241,7 @@ class CharactersTab(ctk.CTkFrame):
                 "character_order": order,
                 "lines": lines,
                 "characters_meta": metadata,
+                "main_character_inference": chapter.get("main_character_inference", {}),
             })
 
             self.log_debug(
@@ -1245,6 +1253,27 @@ class CharactersTab(ctk.CTkFrame):
             self.progress_label.configure(text=f"Processing chapter {i+1}/{total_chapters}")
             self.update_idletasks()
 
+        chosen_main_character = self._resolve_main_character_override()
+        if chosen_main_character:
+            for chapter in self.chapters:
+                chapter["main_character"] = chosen_main_character
+                chapter["results"] = self._apply_main_character_to_lines(
+                    chapter.get("results", []),
+                    chosen_main_character,
+                    chapter.get("characters_meta", {}),
+                )
+                raw = chapter.get("detection_raw")
+                if isinstance(raw, dict):
+                    raw["main_character"] = chosen_main_character
+                    raw["main_character_user_override"] = True
+
+            # refresh payload lines after override
+            for chapter_out, chapter in zip(run_payload["chapters"], self.chapters):
+                chapter_out["lines"] = chapter.get("results", [])
+                chapter_out["main_character"] = chosen_main_character
+
+        run_payload["main_character"] = chosen_main_character
+
         export_path = self._export_detection_run(run_payload)
 
         self.detect_button.configure(state="normal")
@@ -1255,6 +1284,433 @@ class CharactersTab(ctk.CTkFrame):
             self.progress_label.configure(text="Completed")
         self._refresh_char_list()
         self.show_lines()
+
+    def _resolve_main_character_override(self):
+        """Aggregate chapter-level inference and let user confirm/correct it."""
+        candidate_scores = {}
+        for chapter in self.chapters:
+            inf = chapter.get("main_character_inference") or {}
+            if not isinstance(inf, dict):
+                continue
+            for candidate in inf.get("candidates", []) or []:
+                name = candidate.get("name")
+                score = candidate.get("score", 0.0)
+                if not name:
+                    continue
+                candidate_scores[name] = candidate_scores.get(name, 0.0) + float(score)
+
+        if not candidate_scores:
+            return None
+
+        inferred = max(candidate_scores.items(), key=lambda kv: kv[1])[0]
+        self.log_debug(f"[CharactersTab] Main character inferred as: {inferred}")
+
+        selected = self._show_main_character_dropdown_dialog(inferred)
+        if selected:
+            self.main_character_override = selected
+            self.log_debug(f"[CharactersTab] Main character selected: {selected}")
+            return selected
+
+        return None
+
+    def _show_main_character_dropdown_dialog(self, inferred):
+        """Show a dropdown of current characters so the user can confirm or correct the main character."""
+        current_chars = self._get_detected_character_choices()
+        if inferred and inferred not in current_chars:
+            current_chars.insert(0, inferred)
+
+        if not current_chars:
+            messagebox.showinfo(
+                "Main Character Detection",
+                f"Inferred main character: {inferred}\n\nNo current characters are available to choose from.",
+                parent=self,
+            )
+            return inferred
+
+        win = tk.Toplevel(self)
+        win.title("Main Character Detection")
+        win.geometry("480x220")
+        win.transient(self)
+        win.grab_set()
+
+        tk.Label(
+            win,
+            text=(
+                f"Inferred main character: {inferred}\n\n"
+                "Select the correct main character from the dropdown, then click Use Selected."
+            ),
+            justify="left",
+            wraplength=440,
+        ).pack(padx=12, pady=(12, 8), anchor="w")
+
+        choice_var = tk.StringVar(value=inferred if inferred in current_chars else current_chars[0])
+        combo = ctk.CTkComboBox(
+            win,
+            values=current_chars,
+            variable=choice_var,
+            width=360,
+        )
+        combo.pack(padx=12, pady=10, anchor="w")
+        combo.set(choice_var.get())
+
+        result = {"value": None}
+
+        button_frame = tk.Frame(win)
+        button_frame.pack(pady=12)
+
+        def use_selected():
+            picked = choice_var.get().strip()
+            result["value"] = picked or None
+            win.destroy()
+
+        def skip():
+            win.destroy()
+
+        tk.Button(button_frame, text="Use Selected", command=use_selected, width=14).pack(side="left", padx=6)
+        tk.Button(button_frame, text="Skip", command=skip, width=10).pack(side="left", padx=6)
+
+        win.wait_window()
+        return result["value"]
+
+    def _get_detected_character_choices(self):
+        """Build a stable list of characters from the most recent detection payload."""
+        seen = set()
+        choices = []
+
+        for chapter in self.chapters:
+            for name in chapter.get("character_order", []) or []:
+                if not name or name in {"Narrator", "Unknown"} or name in seen:
+                    continue
+                seen.add(name)
+                choices.append(name)
+
+            metadata = chapter.get("characters_meta", {}) or {}
+            if isinstance(metadata, dict):
+                for name in metadata.keys():
+                    if not name or name in {"Narrator", "Unknown"} or name in seen:
+                        continue
+                    seen.add(name)
+                    choices.append(name)
+
+        for chapter in self.chapters:
+            for row in chapter.get("results", []) or []:
+                if not isinstance(row, dict):
+                    continue
+                name = row.get("speaker")
+                if not name or name in {"Narrator", "Unknown"} or name in seen:
+                    continue
+                seen.add(name)
+                choices.append(name)
+
+        if self.main_character_override and self.main_character_override not in seen:
+            choices.insert(0, self.main_character_override)
+
+        return choices
+
+    def _apply_main_character_to_lines(self, lines, main_character, characters_meta=None):
+        """
+        If main character is known, map unresolved first-person quote lines to that character.
+        """
+        if not isinstance(lines, list) or not main_character:
+            return lines
+
+        lines = self._split_mixed_quote_narration_rows(lines, main_character)
+        lines = self._apply_gender_aware_turn_taking(lines, main_character, characters_meta or {})
+
+        fp_pat = re.compile(r"\b(i|me|my|mine|myself|i'm|i've|i'd|i'll)\b", re.IGNORECASE)
+        updated = []
+        for row in lines:
+            if not isinstance(row, dict):
+                updated.append(row)
+                continue
+
+            speaker = row.get("speaker")
+            text = str(row.get("text") or "")
+            is_quote = bool(row.get("is_quote"))
+
+            if is_quote and speaker in {"Unknown", "Narrator"} and fp_pat.search(text):
+                fixed = dict(row)
+                fixed["speaker"] = main_character
+                updated.append(fixed)
+            else:
+                updated.append(row)
+
+        return updated
+
+    def _apply_gender_aware_turn_taking(self, lines, main_character, characters_meta):
+        """
+        Use nearby narration pronouns plus character gender metadata to reassign some
+        quotes away from the main character in short back-and-forth exchanges.
+
+        Examples:
+        - narration says "she ..." near a quote currently assigned to the main character
+        - narration says "he ..." near a quote in a scene with a separate male speaker
+        """
+        if not isinstance(lines, list) or not characters_meta:
+            return lines
+
+        updated = [dict(row) if isinstance(row, dict) else row for row in lines]
+
+        for idx, row in enumerate(updated):
+            if not isinstance(row, dict) or not row.get("is_quote"):
+                continue
+
+            speaker = row.get("speaker")
+            if speaker not in {main_character, "Unknown", "Narrator"}:
+                continue
+
+            context_texts = []
+            for neighbor in (idx - 1, idx + 1):
+                if 0 <= neighbor < len(updated):
+                    nrow = updated[neighbor]
+                    if isinstance(nrow, dict) and not nrow.get("is_quote"):
+                        context_texts.append(str(nrow.get("text") or ""))
+
+            explicit = self._extract_explicit_character_from_context(
+                context_texts,
+                characters_meta,
+                exclude={main_character},
+            )
+            if explicit:
+                row["speaker"] = explicit
+                continue
+
+            gender_hint = self._extract_gender_hint_from_context(context_texts)
+            if not gender_hint:
+                continue
+
+            candidate = self._pick_gender_candidate(
+                updated,
+                idx,
+                main_character,
+                characters_meta,
+                gender_hint,
+                quote_text=str(row.get("text") or ""),
+                context_texts=context_texts,
+            )
+            if candidate:
+                row["speaker"] = candidate
+
+        return updated
+
+    def _extract_explicit_character_from_context(self, context_texts, characters_meta, exclude=None):
+        exclude = exclude or set()
+        found = []
+        for text in context_texts:
+            haystack = str(text or "")
+            if not haystack:
+                continue
+            for name in characters_meta.keys():
+                if name in {"Narrator", "Unknown"} or name in exclude:
+                    continue
+                if str(name).startswith("The "):
+                    continue
+                match = re.search(rf"\b{re.escape(str(name))}\b", haystack, re.IGNORECASE)
+                if not match:
+                    continue
+                left = haystack[max(0, match.start() - 10):match.start()]
+                if "&" in left:
+                    continue
+                found.append(name)
+
+        unique = []
+        for name in found:
+            if name not in unique:
+                unique.append(name)
+        return unique[0] if len(unique) == 1 else None
+
+    def _extract_gender_hint_from_context(self, context_texts):
+        female_score = 0
+        male_score = 0
+        for text in context_texts:
+            lower = str(text or "").lower()
+            if not lower:
+                continue
+            female_score += len(re.findall(r"\b(she|her|hers|woman|girl|female|ma'am|madam|mrs\.?|miss|female voice|woman's voice)\b", lower))
+            male_score += len(re.findall(r"\b(he|him|his|man|boy|male|sir|mr\.?|gruff male voice|male voice|male-voiced|deep male voice|baritone)\b", lower))
+
+        if female_score and not male_score:
+            return "female"
+        if male_score and not female_score:
+            return "male"
+        if female_score > male_score:
+            return "female"
+        if male_score > female_score:
+            return "male"
+        return None
+
+    def _pick_gender_candidate(self, lines, idx, main_character, characters_meta, target_gender, quote_text=None, context_texts=None):
+        def valid_name(name):
+            return (
+                isinstance(name, str)
+                and name not in {"Narrator", "Unknown", main_character}
+                and not name.startswith("The ")
+            )
+
+        def gender_of(name):
+            meta = characters_meta.get(name, {}) if isinstance(characters_meta, dict) else {}
+            gender = str(meta.get("inferred_gender") or "").lower()
+            return gender if gender in {"male", "female"} else None
+
+        def score_candidate(name, distance):
+            gender = gender_of(name)
+            if not gender:
+                return None
+
+            score = 0.0
+            if gender == target_gender:
+                score += 3.0
+            else:
+                score -= 1.0
+
+            lowered_quote = str(quote_text or "").lower()
+            lowered_context = " ".join(str(t or "") for t in (context_texts or [])).lower()
+            combined = f"{lowered_context} {lowered_quote}"
+
+            # Explicit addressee clues can be very informative in dialogue.
+            if re.search(r"\b(ma'am|madam|mrs\.?|miss)\b", combined):
+                if gender == "male":
+                    score += 2.5
+                else:
+                    score -= 1.5
+            if re.search(r"\b(sir|mr\.?)\b", combined):
+                if gender == "female":
+                    score += 2.5
+                else:
+                    score -= 1.5
+
+            # Voice descriptors are strong clues when the narrator points them out.
+            if re.search(r"\b(gruff male voice|male voice|deep male voice|baritone|male-voiced)\b", combined):
+                if gender == "male":
+                    score += 3.0
+                else:
+                    score -= 1.0
+            if re.search(r"\b(female voice|woman's voice|soft female voice|womanly voice)\b", combined):
+                if gender == "female":
+                    score += 3.0
+                else:
+                    score -= 1.0
+
+            # If the quote explicitly names the POV/main character, they are more likely to be the addressee than the speaker.
+            main_tokens = [tok for tok in re.split(r"\s+", str(main_character or "")) if tok]
+            for token in main_tokens:
+                if token and re.search(rf"\b{re.escape(token)}\b", lowered_quote):
+                    if name == main_character:
+                        score -= 3.5
+                    else:
+                        score += 0.75
+                    break
+
+            # Nearby confirmed speakers are strong evidence in short exchanges.
+            for distance_weight in range(max(1, 8 - distance), 0, -1):
+                score += 0.15
+
+            return score
+
+        # Prefer nearby already-detected speakers in surrounding quote rows.
+        nearby = []
+        for distance in range(1, 8):
+            for neighbor in (idx - distance, idx + distance):
+                if not (0 <= neighbor < len(lines)):
+                    continue
+                nrow = lines[neighbor]
+                if not isinstance(nrow, dict) or not nrow.get("is_quote"):
+                    continue
+                name = nrow.get("speaker")
+                if not valid_name(name):
+                    continue
+                candidate_score = score_candidate(name, distance)
+                if candidate_score is None:
+                    continue
+                nearby.append((candidate_score, distance, name))
+
+        if nearby:
+            nearby.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+            best_score = nearby[0][0]
+            best_names = []
+            for candidate_score, distance, name in nearby:
+                if candidate_score != best_score:
+                    break
+                if name not in best_names:
+                    best_names.append(name)
+            if len(best_names) == 1:
+                return best_names[0]
+
+        # Fallback only if there is a single plausible chapter-level candidate of that gender.
+        chapter_candidates = []
+        for name in characters_meta.keys():
+            if not valid_name(name):
+                continue
+            candidate_score = score_candidate(name, 99)
+            if candidate_score is not None:
+                chapter_candidates.append((candidate_score, name))
+        if not chapter_candidates:
+            return None
+
+        chapter_candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        if len(chapter_candidates) >= 2 and chapter_candidates[0][0] == chapter_candidates[1][0]:
+            return None
+        return chapter_candidates[0][1]
+
+    def _split_mixed_quote_narration_rows(self, lines, main_character):
+        """
+        Split rows that contain both scene narration and quoted dialogue.
+
+        Examples fixed:
+        - Narrator line ending with a quote
+        - Quote line followed by narration tail
+        """
+        quote_pat = re.compile(r'(["“][^"”]+["”])')
+        split_rows = []
+
+        for row in lines:
+            if not isinstance(row, dict):
+                split_rows.append(row)
+                continue
+
+            text = str(row.get("text") or "")
+            if not text:
+                split_rows.append(row)
+                continue
+
+            # Fast path: no obvious quote delimiters.
+            if "“" not in text and '"' not in text:
+                split_rows.append(row)
+                continue
+
+            parts = quote_pat.split(text)
+            if len(parts) <= 1:
+                split_rows.append(row)
+                continue
+
+            made_split = False
+            for part in parts:
+                chunk = part.strip()
+                if not chunk:
+                    continue
+
+                is_quote_chunk = bool(quote_pat.fullmatch(chunk))
+                if is_quote_chunk:
+                    speaker = row.get("speaker")
+                    if speaker in {"Narrator", "Unknown", None, ""}:
+                        speaker = main_character or "Unknown"
+                    split_rows.append({
+                        "speaker": speaker,
+                        "text": chunk,
+                        "is_quote": True,
+                    })
+                else:
+                    split_rows.append({
+                        "speaker": "Narrator",
+                        "text": chunk,
+                        "is_quote": False,
+                    })
+                made_split = True
+
+            if not made_split:
+                split_rows.append(row)
+
+        return split_rows
 
     def _export_detection_run(self, payload):
         """Write the latest detection output to a timestamped folder for sharing."""

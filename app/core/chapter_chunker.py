@@ -197,10 +197,28 @@ def load_book(path: str) -> str:
             raise ImportError("Please install ebooklib and beautifulsoup4 for EPUB support.")
         book = epub.read_epub(path)
         text_parts = []
-        for item in book.get_items():
-            if item.get_type() == 9:  # DOCUMENT
-                soup = BeautifulSoup(item.get_body_content(), "html.parser")
-                text_parts.append(soup.get_text())
+
+        # EPUBs should be read in spine order; iterating all items can scramble chapters.
+        doc_items = {item.get_id(): item for item in book.get_items() if item.get_type() == 9}
+        seen_ids = set()
+
+        for spine_item in book.spine:
+            item_id = spine_item[0] if isinstance(spine_item, tuple) else spine_item
+            item = doc_items.get(item_id)
+            if not item:
+                continue
+            seen_ids.add(item_id)
+            soup = BeautifulSoup(item.get_body_content(), "html.parser")
+            # Preserve block boundaries so headings stay on their own lines.
+            text_parts.append(soup.get_text("\n", strip=True))
+
+        # Some books contain valid doc items not listed in spine; include as fallback.
+        for item_id, item in doc_items.items():
+            if item_id in seen_ids:
+                continue
+            soup = BeautifulSoup(item.get_body_content(), "html.parser")
+            text_parts.append(soup.get_text("\n", strip=True))
+
         return "\n".join(text_parts)
 
     elif ext == ".pdf":
@@ -496,7 +514,7 @@ def _merge_formatting_signals(text_candidates: List[Dict], font_candidates: List
     return result
 
 
-def detect_chapters(text: str, min_chapter_length: int = 100) -> List[Dict]:
+def detect_chapters(text: str, min_chapter_length: int = 100, include_part_markers: bool = True) -> List[Dict]:
     """
     Detect chapters - conservative matching focusing on chapter markers.
     """
@@ -514,20 +532,30 @@ def detect_chapters(text: str, min_chapter_length: int = 100) -> List[Dict]:
         if re.match(r'^(Prologue|Epilogue|Preface|Foreword|Introduction|Afterword|Interlude|Conclusion|Coda|Appendix)\s*$', s, re.IGNORECASE):
             return s
 
-        # Chapter/Part/etc with NUMBER - must be digits or uppercase Roman numerals ONLY
-        # We'll check for both cases by using two separate patterns
+        # Chapter/Part/etc with NUMBER words, digits, or Roman numerals.
+        marker_words = ["CHAPTER", "BOOK", "VOLUME", "SECTION", "ACT", "SCENE"]
+        if include_part_markers:
+            marker_words.append("PART")
+
+        marker_re = "|".join(marker_words)
+        number_token_re = (
+            r"(?:[0-9]+|[IVXLCDM]+|"
+            r"ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|"
+            r"ELEVEN|TWELVE|THIRTEEN|FOURTEEN|FIFTEEN|SIXTEEN|"
+            r"SEVENTEEN|EIGHTEEN|NINETEEN|"
+            r"TWENTY(?:[-\s](?:ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE))?|"
+            r"THIRTY)"
+        )
+
         patterns = [
-            # All caps
-            r"^((?:CHAPTER|PART|BOOK|VOLUME|SECTION|ACT|SCENE)\s+(?:[0-9]+|[IVXLCDM]+)\s*[\.\:\-]?)\s*",
-            # Mixed case
-            r"^((?:[Cc]hapter|[Pp]art|[Bb]ook|[Vv]olume|[Ss]ection|[Aa]ct|[Ss]cene)\s+(?:[0-9]+|[IVXLCDM]+)\s*[\.\:\-]?)\s*",
+            rf"^((?:{marker_re})\s+{number_token_re}\s*[\.\:\-]?)\s*",
             # Standalone Roman numerals with title: "I. Title", "II. – Title", etc.
             # Require at least 2 chars of Roman numerals OR allow single I/V/X followed by period/dash
             r"^((?:[IVX]{2,}|[IVX])[\.\-\:])\s*",
         ]
 
         for pattern_idx, pattern in enumerate(patterns):
-            match = re.match(pattern, s)  # Note: no flags, case-sensitive
+            match = re.match(pattern, s, re.IGNORECASE)
             if match:
                 base = match.group(1)
                 rest = s[match.end():].strip()
@@ -591,9 +619,9 @@ def detect_chapters(text: str, min_chapter_length: int = 100) -> List[Dict]:
 
         empty_count = 0
 
-        if is_chapter and len(current_chapter["text"]) > 0:
+        if is_chapter:
             chapter_text = '\n'.join(current_chapter["text"])
-            if len(chapter_text.strip()) >= min_chapter_length:
+            if chapter_text.strip() and len(chapter_text.strip()) >= min_chapter_length:
                 chapters.append({
                     "title": current_chapter["title"],
                     "text": chapter_text,
@@ -616,6 +644,18 @@ def detect_chapters(text: str, min_chapter_length: int = 100) -> List[Dict]:
                 "text": chapter_text,
                 "start_line": current_chapter["start_line"]
             })
+
+    # If we detected both PART headings and more granular CHAPTER headings,
+    # re-run without PART markers so we split by chapters inside parts.
+    if include_part_markers:
+        has_part = any(re.match(r'^\s*part\b', ch.get("title", ""), re.IGNORECASE) for ch in chapters)
+        has_chapter = any(re.match(r'^\s*chapter\b', ch.get("title", ""), re.IGNORECASE) for ch in chapters)
+        if has_part and has_chapter:
+            return detect_chapters(
+                text,
+                min_chapter_length=min_chapter_length,
+                include_part_markers=False,
+            )
 
     return chapters
 
