@@ -55,7 +55,7 @@ If the exact PyTorch version for your Python build is unavailable (common with n
    The prompt suggests CUDA 12.8 (RTX 50-series Blackwell, driver ≥ 570), CUDA 12.1 (most cards with driver ≥ 535), CUDA 11.8 (legacy GPUs, driver ≥ 520), or CPU-only. The installer first attempts the project-tested wheel versions, then automatically retries with compatible latest wheels when needed.
 
 3. **Core dependency install**  
-   After PyTorch finishes, the script installs the rest of the stack from `requirements_min.txt` (Coqui XTTS, Transformers, spaCy, GUI/tooling utilities, etc.) and downloads the `en_core_web_md` model.
+   After PyTorch finishes, the script installs the rest of the stack from `requirements_min.txt` (F5-TTS, PySide6, Transformers, spaCy, GUI/tooling utilities, etc.) and downloads the `en_core_web_md` model.
 
 4. **Post-install summary**  
    When the script prints `✅ PolyVox environment ready!`, it shows activation instructions and optional system package hints.

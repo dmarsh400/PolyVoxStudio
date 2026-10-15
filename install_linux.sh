@@ -24,9 +24,9 @@ EOT
   case "${choice}" in
     2)
       TORCH_SUFFIX="cu121"
-      TORCH_VERSION="2.1.0"
-      TORCHVISION_VERSION="0.16.0"
-      TORCHAUDIO_VERSION="2.1.0"
+      TORCH_VERSION="2.5.1"
+      TORCHVISION_VERSION="0.20.1"
+      TORCHAUDIO_VERSION="2.5.1"
       TORCH_INDEX="https://download.pytorch.org/whl/cu121"
       ;;
     3)
@@ -38,16 +38,16 @@ EOT
       ;;
     4)
       TORCH_SUFFIX="cpu"
-      TORCH_VERSION="2.1.0"
-      TORCHVISION_VERSION="0.16.0"
-      TORCHAUDIO_VERSION="2.1.0"
+      TORCH_VERSION="2.5.1"
+      TORCHVISION_VERSION="0.20.1"
+      TORCHAUDIO_VERSION="2.5.1"
       TORCH_INDEX="https://download.pytorch.org/whl/cpu"
       ;;
     *)
       TORCH_SUFFIX="cu118"
-      TORCH_VERSION="2.1.0"
-      TORCHVISION_VERSION="0.16.0"
-      TORCHAUDIO_VERSION="2.1.0"
+      TORCH_VERSION="2.5.1"
+      TORCHVISION_VERSION="0.20.1"
+      TORCHAUDIO_VERSION="2.5.1"
       TORCH_INDEX="https://download.pytorch.org/whl/cu118"
       ;;
   esac

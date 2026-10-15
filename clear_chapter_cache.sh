@@ -11,7 +11,7 @@ read -p "Continue? (y/n) " -n 1 -r
 echo ""
 
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    cd /home/moderatec/Desktop/VOX_current_working
+    cd "$(dirname "$0")"
     
     echo "Clearing cached chapter detections..."
     rm -rf output/booknlp_*

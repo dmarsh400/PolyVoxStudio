@@ -4,6 +4,7 @@
 **Many voices, one story.**  
 Professional audiobook creation with AI character voices.
 
+[![Version](https://img.shields.io/badge/version-3.0-blue)](#-whats-new-in-v30)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue)](https://www.python.org/downloads/)
 [![GPU Support](https://img.shields.io/badge/GPU-CUDA%2012.8%20%7C%2012.1%20%7C%2011.8%20%7C%20CPU-green)](GPU_COMPATIBILITY.md)
@@ -18,11 +19,11 @@ Professional audiobook creation with AI character voices.
 PolyVox Studio turns books into audiobooks with **distinct voices per character**. It detects characters and dialogue, lets you assign voices (or clone your own), and renders polished audio via an intuitive desktop GUI.
 
 **Highlights**
-- 🤖 Character & dialogue detection (BookNLP + heuristics)  
-- 🎤 Built-in voices & **voice cloning** (XTTS v2 / Coqui TTS)  
+- 🤖 Character & dialogue detection (BookNLP + heuristics), with book-level main-character/POV persistence across chapters  
+- 🎤 Built-in voices & **voice cloning** ([F5-TTS](https://github.com/SWivid/F5-TTS))  
 - 🗂️ Chapter handling, line-level editing & attribution fixes  
 - ⚙️ GPU acceleration with selectable **CUDA 12.8 (RTX 50-series) / CUDA 12.1 / CUDA 11.8 / CPU** modes  
-- 🖥️ Modern CustomTkinter UI with progress & logs
+- 🖥️ Modern PySide6 desktop UI with progress & logs (CustomTkinter UI retained under `app/ui` during migration)
 
 ---
 
@@ -30,7 +31,7 @@ PolyVox Studio turns books into audiobooks with **distinct voices per character*
 
 Clone the repo and run the platform installer. Each script creates a `PolyVox` virtual environment, installs the right PyTorch wheel (CUDA 12.8, CUDA 12.1, CUDA 11.8, or CPU), and pulls the remaining dependencies.
 
-### 🆕 v2.5 install & startup improvements
+### Installer & launcher behavior
 
 - Linux installer now retries with the latest compatible PyTorch wheels if pinned wheels are unavailable for your Python version.
 - Linux installer now falls back to CPU PyTorch automatically if GPU wheel install fails.
@@ -129,9 +130,9 @@ Both installers prompt for a PyTorch runtime. Pick the option that matches your 
 
 ---
 
-## 🛡️ Hallucination Guard (optional)
+## 🛡️ Hallucination Guard (optional, planned)
 
-PolyVox can now self-check XTTS lines before finalizing them. The guard synthesizes a segment, transcribes it with Whisper (prefers `faster-whisper`), and compares the transcript with the expected text. If the similarity drops below a threshold, it can retry—falling back to the deterministic XTTS preset on later attempts.
+PolyVox can self-check synthesized lines before finalizing them. The guard synthesizes a segment, transcribes it with Whisper (prefers `faster-whisper`), and compares the transcript with the expected text. If the similarity drops below a threshold, it can retry.
 
 **Enable it** by exporting an environment variable before launching the app:
 
@@ -141,7 +142,7 @@ export POLYVOX_TTS_GUARD=on
 
 Available modes:
 
-- `on` / `true` — guard every XTTS line.
+- `on` / `true` — guard every line.
 - `auto` *(default)* — guard narrator lines only.
 - `narrator` — identical to `auto`, explicit for readability.
 - `off` / `false` — disable the guard entirely.
@@ -165,7 +166,7 @@ Voice definitions (e.g., JSON entries) can opt in/out per character using:
 
 ---
 
-## �📚 Documentation
+## 📚 Documentation
 
 - **Linux Installation Guide** — prerequisites, installer walkthrough, troubleshooting  
   → `INSTALL_LINUX.md`
@@ -189,6 +190,40 @@ PolyVox now includes **advanced PDF chapter detection** with:
 - ⚡ Background threading prevents UI freezing on large PDFs
 
 👉 **[Full PDF Chapter Detection guide →](PDF_CHAPTER_DETECTION.md)**
+
+---
+
+## 🆕 What's New in v3.0
+
+### 🎙️ F5-TTS engine & PySide6 UI
+- **XTTS v2 / Coqui TTS has been replaced by [F5-TTS](https://github.com/SWivid/F5-TTS)**, the only synthesis engine, for faster inference and higher-fidelity cloning. `coqui-tts` is no longer a dependency; `f5-tts` and `PySide6` are (see `requirements_min.txt`).
+- F5-TTS needs a transcript of each voice's reference clip (`ref_text`). Existing voices can be migrated with `scripts/migrate_voices_to_f5.py` (uses `faster-whisper`); new clones are transcribed once at clone time.
+- **PySide6 is the primary UI** (`app/ui_qt`, launched by `app/main.py`). The CustomTkinter UI (`app/ui`) remains only for reference.
+- Custom click-anywhere dropdowns replace `QComboBox` popups (which fail to render on some Linux window managers). The Split Line dialog now inserts a newline on **Enter** and confirms with **Ctrl+Enter**.
+
+### 🧠 Much better character detection & attribution
+- **BookNLP is arbitrated, not trusted blindly.** Its quote speaker is checked against local dialogue structure and overridden when the quote addresses or names that person, when that person isn't taking part in the scene (scenes reset at `* * *`), or when tag/continuation cues point elsewhere.
+- **Turn-taking cues:** `"…," said X. "…"` continuation, "went on/continued", action beats, vocative replies (`"Charlie, …"` is answered by Charlie), and short answers to tagged questions.
+- Vocatives are detected without needing "you" (`"Why, Zack?"`).
+- Chapter subtitles and inline scare quotes (e.g. "quaint") are treated as narration instead of dialogue.
+- Book-level main-character/POV selection persists across chapters; narration-only characters can appear in the cast, with a `booknlp_character_debug` diagnostics block explaining inclusions.
+
+### 😠 Automatic emotional speech (EmoSteer)
+- Based on [EmoSteer-TTS](https://arxiv.org/abs/2508.03543) (training-free activation steering). Emotion is parsed **automatically from narration cues** such as "screamed Alice", "laughed bitterly" or "in a leaden voice" (`app/core/emotion_cues.py`), with adverbs scaling intensity. Supported: angry, fearful, happy, sad, surprised, disgusted.
+- No setup: on the first emotional line, steering vectors are built once from the public [RAVDESS](https://zenodo.org/records/1188976) speech corpus (~200 MB download, a few minutes) and cached in `app/core/data/emosteer/`. RAVDESS is licensed CC BY-NC-SA 4.0 (non-commercial). If anything fails, lines fall back to neutral synthesis.
+- Tune strength with `BASE_ALPHA` in `app/core/emosteer.py` (default 8; values of ~16 and above degrade audio).
+
+### 🔊 Audio quality & pacing
+- **No more phantom phrases:** reference clips over ~11.5 s are trimmed at a pause and re-transcribed, so the transcript matches what F5-TTS actually hears (previously the unheard tail was spoken at the start of lines).
+- **Long lines are no longer cut off** (an old 500-character limit was removed; F5-TTS chunks text itself).
+- **Speech-rate governor:** lines synthesized too fast are regenerated at a lower speed. Narration uses a slower, audiobook-style pace (`NARRATOR_*` constants in `app/core/voices.py`).
+- Fixed a crash after audio export caused by logging from a worker thread into Qt widgets, and an empty-audio error when silence trimming removed a very short clip.
+
+### 📦 Installers
+- Installers now pin PyTorch 2.5.1 (CUDA 11.8 / 12.1 / CPU) and 2.7.0 (CUDA 12.8), still with automatic fallback to the latest compatible wheels and then CPU.
+- `requirements_min.txt` now installs `f5-tts` and `PySide6`; the launchers check for them and auto-repair.
+
+> **Upgrading from 2.x:** re-run the installer (or `pip install -r requirements_min.txt`) and re-run chapter detection; cached detections from older versions are not reused. Voice reference files are not distributed with the repo — add your own under `voices/references/`.
 
 ---
 

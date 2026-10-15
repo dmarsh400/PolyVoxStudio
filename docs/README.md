@@ -19,7 +19,7 @@ PolyVox Studio turns books into audiobooks with **distinct voices per character*
 
 **Highlights**
 - 🤖 Character & dialogue detection (BookNLP + heuristics)  
-- 🎤 Built-in voices & **voice cloning** (XTTS v2 / Coqui TTS)  
+- 🎤 Built-in voices & **voice cloning** (F5-TTS)  
 - 🗂️ Chapter handling, line-level editing & attribution fixes  
 - ⚙️ GPU acceleration with selectable **CUDA 12.8 (RTX 50-series) / CUDA 12.1 / CUDA 11.8 / CPU** modes  
 - 🖥️ Modern CustomTkinter UI with progress & logs
@@ -131,7 +131,7 @@ Both installers prompt for a PyTorch runtime. Pick the option that matches your 
 
 ## 🛡️ Hallucination Guard (optional)
 
-PolyVox can now self-check XTTS lines before finalizing them. The guard synthesizes a segment, transcribes it with Whisper (prefers `faster-whisper`), and compares the transcript with the expected text. If the similarity drops below a threshold, it can retry—falling back to the deterministic XTTS preset on later attempts.
+PolyVox can now self-check lines before finalizing them. The guard synthesizes a segment, transcribes it with Whisper (prefers `faster-whisper`), and compares the transcript with the expected text. If the similarity drops below a threshold, it can retry—falling back to the deterministic XTTS preset on later attempts.
 
 **Enable it** by exporting an environment variable before launching the app:
 

@@ -83,10 +83,10 @@ function Get-RuntimeOption {
     param([string]$Choice)
 
     switch ($Choice) {
-        "2" { return @{ Choice = 2; Label = "CUDA 12.1  (recent NVIDIA, driver >= 535)"; Suffix = "cu121"; Index = "https://download.pytorch.org/whl/cu121"; TorchVersion = "2.1.0"; TorchvisionVersion = "0.16.0"; TorchaudioVersion = "2.1.0" } }
+        "2" { return @{ Choice = 2; Label = "CUDA 12.1  (recent NVIDIA, driver >= 535)"; Suffix = "cu121"; Index = "https://download.pytorch.org/whl/cu121"; TorchVersion = "2.5.1"; TorchvisionVersion = "0.20.1"; TorchaudioVersion = "2.5.1" } }
         "3" { return @{ Choice = 3; Label = "CUDA 12.8  (RTX 50-series Blackwell, driver >= 570)"; Suffix = "cu128"; Index = "https://download.pytorch.org/whl/cu128"; TorchVersion = "2.7.0"; TorchvisionVersion = "0.22.0"; TorchaudioVersion = "2.7.0" } }
-        "4" { return @{ Choice = 4; Label = "CPU only   (no NVIDIA GPU)"; Suffix = "cpu"; Index = "https://download.pytorch.org/whl/cpu"; TorchVersion = "2.1.0"; TorchvisionVersion = "0.16.0"; TorchaudioVersion = "2.1.0" } }
-        default { return @{ Choice = 1; Label = "CUDA 11.8  (legacy NVIDIA, driver >= 520)"; Suffix = "cu118"; Index = "https://download.pytorch.org/whl/cu118"; TorchVersion = "2.1.0"; TorchvisionVersion = "0.16.0"; TorchaudioVersion = "2.1.0" } }
+        "4" { return @{ Choice = 4; Label = "CPU only   (no NVIDIA GPU)"; Suffix = "cpu"; Index = "https://download.pytorch.org/whl/cpu"; TorchVersion = "2.5.1"; TorchvisionVersion = "0.20.1"; TorchaudioVersion = "2.5.1" } }
+        default { return @{ Choice = 1; Label = "CUDA 11.8  (legacy NVIDIA, driver >= 520)"; Suffix = "cu118"; Index = "https://download.pytorch.org/whl/cu118"; TorchVersion = "2.5.1"; TorchvisionVersion = "0.20.1"; TorchaudioVersion = "2.5.1" } }
     }
 }
 

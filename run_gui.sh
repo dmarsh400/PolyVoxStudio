@@ -30,7 +30,8 @@ checks = {
     "Pillow (PIL)": "PIL",
     "spaCy": "spacy",
     "PyTorch": "torch",
-    "CustomTkinter": "customtkinter",
+    "PySide6": "PySide6",
+    "F5-TTS": "f5_tts",
 }
 
 missing = [name for name, module in checks.items() if importlib.util.find_spec(module) is None]

@@ -634,9 +634,7 @@ class TextPreprocessor:
         # Step 9: Clean whitespace
         text = self.remove_excessive_whitespace(text)
 
-        # Step 10: Limit length (XTTS works best with shorter segments)
-        text = safe_truncate_at_sentence(text, max_chars=500)
-
+        # F5-TTS chunks long text itself, so never truncate here.
         return text
 
     def batch_prepare(self, texts: List[str], **kwargs) -> List[str]:

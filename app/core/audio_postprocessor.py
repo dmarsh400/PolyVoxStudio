@@ -800,6 +800,26 @@ class AudioPostProcessor:
         # Get output info
         audio_out, sr_out = sf.read(output_path)
 
+        if len(audio_out) == 0:
+            print(
+                "[AudioPostProcessor] Output became empty after trimming; "
+                "retrying without silence removal."
+            )
+            if method == 'ffmpeg':
+                self.process_ffmpeg(
+                    source_path,
+                    output_path,
+                    purpose=purpose,
+                    enable_reverb=enable_reverb,
+                    trim_silence=False,
+                )
+                method = 'ffmpeg-no-trim'
+            else:
+                audio_out = self.process_python(proc_audio, enhance=enhance, trim_silence=False)
+                sf.write(output_path, audio_out, self.sample_rate)
+                method = f"{method}-no-trim"
+            audio_out, sr_out = sf.read(output_path)
+
         if method.startswith('ffmpeg'):
             normalized = self.normalize_audio(np.asarray(audio_out, dtype=np.float32))
             if not np.allclose(normalized, audio_out, atol=1e-6):
@@ -898,16 +918,20 @@ class AudioPostProcessor:
             duration_out = len(audio_out) / sr_out
         
         # Calculate stats
+        peak_in = float(np.abs(proc_audio).max()) if len(proc_audio) else 0.0
+        peak_out = float(np.abs(audio_out).max()) if len(audio_out) else 0.0
+        rms_in = float(np.sqrt(np.mean(proc_audio**2))) if len(proc_audio) else 0.0
+        rms_out = float(np.sqrt(np.mean(audio_out**2))) if len(audio_out) else 0.0
         stats = {
             'method': method,
             'duration_in': duration_in,
             'duration_out': duration_out,
             'samples_in': len(proc_audio),
             'samples_out': len(audio_out),
-            'peak_in': float(np.abs(proc_audio).max()),
-            'peak_out': float(np.abs(audio_out).max()),
-            'rms_in': float(np.sqrt(np.mean(proc_audio**2))),
-            'rms_out': float(np.sqrt(np.mean(audio_out**2))),
+            'peak_in': peak_in,
+            'peak_out': peak_out,
+            'rms_in': rms_in,
+            'rms_out': rms_out,
         }
 
         stats['fallback_applied'] = fallback_applied

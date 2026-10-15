@@ -42,7 +42,7 @@
 
 ### Quick Test (No PDF Needed)
 ```bash
-cd "/home/moderatec/Desktop/Polyvox Studio new detection"
+cd /path/to/PolyVoxStudio
 source .venv/bin/activate
 python quick_test.py
 ```

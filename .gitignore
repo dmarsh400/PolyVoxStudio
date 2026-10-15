@@ -87,3 +87,22 @@ test_output/
 # Environment files
 .env
 .env.local
+
+# Local-only data, scratch scripts and generated caches
+app/core/data/ref_cache/
+app/core/data/emosteer/
+Character Assignments/
+characters_assignments.json
+*.epub
+PolyVoxStudio-main.zip
+analyze.py
+analyze_gui_output.py
+analyze_output.py
+check_lines.py
+find_examples.py
+quick_analyze.py
+quick_test.py
+diagnose_issue.py
+voices/references/
+voices/tests/
+voices/azure_generated/

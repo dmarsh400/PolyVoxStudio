@@ -17,7 +17,7 @@ echo ℹ️ Using Python: !PYTHON_PATH!
 REM Check for missing dependencies and attempt auto-repair
 "!PYTHON_EXE!" -c ^
   "import importlib.util; ^
-   checks = {'Pillow': 'PIL', 'spaCy': 'spacy', 'PyTorch': 'torch', 'CustomTkinter': 'customtkinter'}; ^
+   checks = {'Pillow': 'PIL', 'spaCy': 'spacy', 'PyTorch': 'torch', 'PySide6': 'PySide6', 'F5-TTS': 'f5_tts'}; ^
    missing = [m for m in checks.items() if importlib.util.find_spec(m[1]) is None]; ^
    exit(len(missing))" >nul 2>&1
 
