@@ -119,6 +119,12 @@ Both installers prompt for a PyTorch runtime. Pick the option that matches your 
 - FFmpeg in PATH for audio enhancement/export niceties.
 
 ---
+## 💬 Community & Support
+
+Join our official Discord server to chat with other users, share your generated audiobooks, request new features, or get help troubleshooting hardware and CUDA installation issues:
+
+👉 **[Join the PolyVox Studio Discord Server](https://discord.gg/8mSYq7xyqc)**
+---
 
 ## 🔧 Troubleshooting (fast fixes)
 
@@ -231,6 +237,7 @@ PolyVox now includes **advanced PDF chapter detection** with:
 - `requirements_min.txt` now installs `f5-tts` and `PySide6`; the launchers check for them and auto-repair.
 
 > **Upgrading from 2.x:** re-run the installer (or `pip install -r requirements_min.txt`) and re-run chapter detection; cached detections from older versions are not reused. Voice reference files are not distributed with the repo — add your own under `voices/references/`.
+
 
 ---
 
