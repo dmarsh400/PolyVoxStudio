@@ -133,6 +133,11 @@ install_torch() {
 install_requirements() {
   echo "\n📦 Installing core PolyVox dependencies"
   python -m pip install -r "${PROJECT_ROOT}/requirements_min.txt"
+  if ! python -c "from f5_tts.api import F5TTS" >/dev/null 2>&1; then
+    echo "⚠️  F5-TTS import check failed; reinstalling vocos/encodec..."
+    python -m pip install --force-reinstall --no-deps encodec vocos
+    python -c "from f5_tts.api import F5TTS" || { echo "❌ F5-TTS still fails to import. See the error above." >&2; exit 1; }
+  fi
   echo "\n📚 Downloading spaCy language model (en_core_web_md)"
   python -m spacy download en_core_web_md
 }

@@ -106,3 +106,4 @@ diagnose_issue.py
 voices/references/
 voices/tests/
 voices/azure_generated/
+app/voice_assignments_by_book.json

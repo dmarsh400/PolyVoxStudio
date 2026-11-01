@@ -89,6 +89,7 @@ class CharactersTab(QWidget):
         self.chapters = []
         self.lines = []
         self.character_order = []
+        self.character_profiles = {}
         self.visible_line_indexes = []
         self.speaker_colors = {}
         self.search_query = ""
@@ -670,6 +671,13 @@ class CharactersTab(QWidget):
                 chapter_unknown_diag = detection.get("unknown_diagnostics", [])
                 chapter_unknown_summary = detection.get("unknown_diagnostics_summary", {})
                 chapter_main_inference = detection.get("main_character_inference", {})
+                for cname, meta in (detection.get("characters") or {}).items():
+                    if not isinstance(meta, dict):
+                        continue
+                    known = self.character_profiles.setdefault(cname, {})
+                    for key in ("inferred_gender", "inferred_age_category"):
+                        if meta.get(key) not in (None, "unknown") and known.get(key) in (None, "unknown"):
+                            known[key] = meta[key]
 
                 self.log_debug(
                     f"[CharactersTab] Chapter '{title}' input={len(text)} chars output={len(chapter_lines)} lines"
@@ -862,7 +870,7 @@ class CharactersTab(QWidget):
             QMessageBox.warning(self, "No lines", "Run detection before sending to Voices.")
             return
         if self.send_to_voices_cb:
-            self.send_to_voices_cb(self.character_order, self.lines, self.speaker_colors)
+            self.send_to_voices_cb(self.character_order, self.lines, self.speaker_colors, self.character_profiles)
         QMessageBox.information(self, "Sent", "Detected lines were sent to Voices tab.")
 
     def save_assignments(self):

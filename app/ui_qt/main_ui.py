@@ -151,6 +151,7 @@ class PolyVoxApp(QMainWindow):
             set_book_text_cb=self.set_book_text,
             go_to_characters_cb=lambda: self.notebook.setCurrentWidget(self.characters_tab),
             log_debug=self.log_debug,
+            book_loaded_cb=lambda key: self.voices_tab and self.voices_tab.set_book(key),
         )
         self.notebook.addTab(self.book_processing_tab, "Book Processing")
 
@@ -204,9 +205,9 @@ class PolyVoxApp(QMainWindow):
         )
         self.notebook.addTab(self.settings_tab, "Settings")
 
-    def _send_lines_to_voices(self, characters, lines, character_colors=None):
+    def _send_lines_to_voices(self, characters, lines, character_colors=None, character_profiles=None):
         if self.voices_tab:
-            self.voices_tab.load_character_lines(characters, lines, character_colors)
+            self.voices_tab.load_character_lines(characters, lines, character_colors, character_profiles)
             self.notebook.setCurrentWidget(self.voices_tab)
 
     def set_book_text(self, chapters):

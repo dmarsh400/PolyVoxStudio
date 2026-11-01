@@ -261,6 +261,14 @@ function Install-Torch {
 function Install-Dependencies {
     Write-Host "Installing PolyVox core dependencies" -ForegroundColor Green
     Invoke-InEnv "pip" @("install", "-r", (Join-Path $projectRoot "requirements_min.txt"))
+    $pythonExe = Join-Path $envDir "Scripts/python.exe"
+    & $pythonExe -c "from f5_tts.api import F5TTS" 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "F5-TTS import check failed; reinstalling vocos/encodec..." -ForegroundColor Yellow
+        & $pythonExe -m pip install --force-reinstall --no-deps encodec vocos
+        & $pythonExe -c "from f5_tts.api import F5TTS"
+        if ($LASTEXITCODE -ne 0) { Write-Error "F5-TTS still fails to import. See the error above." -ErrorAction Stop }
+    }
     Write-Host "Downloading spaCy model (en_core_web_md)" -ForegroundColor Green
     Invoke-InEnv "spacy" @("download", "en_core_web_md")
 }

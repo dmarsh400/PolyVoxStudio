@@ -12,6 +12,8 @@ nltk>=3.9.0
 
 # Text-to-Speech (F5-TTS)
 f5-tts>=1.1.10
+vocos>=0.1.0
+encodec>=0.1.1  # imported by vocos (F5-TTS vocoder)
 
 # Audio Processing
 numpy>=1.24.0,<2.0

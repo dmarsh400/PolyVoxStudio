@@ -514,10 +514,32 @@ def _merge_formatting_signals(text_candidates: List[Dict], font_candidates: List
     return result
 
 
-def detect_chapters(text: str, min_chapter_length: int = 100, include_part_markers: bool = True) -> List[Dict]:
+# User-selectable heading formats; None means auto-detect.
+CHAPTER_TEMPLATES: Dict[str, Optional[Dict]] = {
+    "Auto-detect": None,
+    "Chapter N (Chapter 1 / Chapter One)": {"markers": ["CHAPTER"]},
+    "Part N": {"markers": ["PART"]},
+    "Book / Volume N": {"markers": ["BOOK", "VOLUME"]},
+    "Act / Scene N": {"markers": ["ACT", "SCENE"]},
+    "Roman numerals (I., II., III.)": {"markers": [], "roman": True},
+    "Numbers only (1, 2, 3)": {"markers": [], "digits": True},
+    "Custom pattern (regex)": {"markers": [], "custom": True},
+}
+
+
+def detect_chapters(text: str, min_chapter_length: int = 100, include_part_markers: bool = True,
+                    template: Optional[str] = None, custom_pattern: Optional[str] = None) -> List[Dict]:
     """
     Detect chapters - conservative matching focusing on chapter markers.
+
+    `template` (a key of CHAPTER_TEMPLATES) restricts detection to one heading format.
     """
+    cfg = CHAPTER_TEMPLATES.get(template) if template else None
+    custom_re = None
+    if cfg is not None and cfg.get("custom"):
+        if not (custom_pattern or "").strip():
+            raise ValueError("Enter a heading pattern (regular expression) for the custom format.")
+        custom_re = re.compile(custom_pattern.strip(), re.IGNORECASE)
     chapters = []
     lines = text.split('\n')
 
@@ -532,61 +554,50 @@ def detect_chapters(text: str, min_chapter_length: int = 100, include_part_marke
         if re.match(r'^(Prologue|Epilogue|Preface|Foreword|Introduction|Afterword|Interlude|Conclusion|Coda|Appendix)\s*$', s, re.IGNORECASE):
             return s
 
-        # Chapter/Part/etc with NUMBER words, digits, or Roman numerals.
-        marker_words = ["CHAPTER", "BOOK", "VOLUME", "SECTION", "ACT", "SCENE"]
-        if include_part_markers:
-            marker_words.append("PART")
+        if custom_re is not None and custom_re.search(s) and len(s) < 100:
+            return s[:80]
 
-        marker_re = "|".join(marker_words)
+        # Marker words are case-insensitive; Roman numerals must be uppercase so that
+        # sentence openers such as "Act motivated" or "Scene investigative" never match.
+        if cfg is not None:
+            marker_words = list(cfg.get("markers", []))
+        else:
+            marker_words = ["CHAPTER", "BOOK", "VOLUME", "SECTION", "ACT", "SCENE"]
+            if include_part_markers:
+                marker_words.append("PART")
+
         number_token_re = (
             r"(?:[0-9]+|[IVXLCDM]+|"
-            r"ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|"
+            r"(?i:ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|"
             r"ELEVEN|TWELVE|THIRTEEN|FOURTEEN|FIFTEEN|SIXTEEN|"
             r"SEVENTEEN|EIGHTEEN|NINETEEN|"
             r"TWENTY(?:[-\s](?:ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE))?|"
-            r"THIRTY)"
+            r"THIRTY))"
         )
 
-        patterns = [
-            rf"^((?:{marker_re})\s+{number_token_re}\s*[\.\:\-]?)\s*",
+        patterns = []
+        if marker_words:
+            marker_re = "|".join(marker_words)
+            patterns.append(rf"^((?i:{marker_re})\s+{number_token_re}(?![A-Za-z0-9])\s*[\.\:\-]?)\s*")
+        if cfg is None or cfg.get("roman"):
             # Standalone Roman numerals with title: "I. Title", "II. – Title", etc.
-            # Require at least 2 chars of Roman numerals OR allow single I/V/X followed by period/dash
-            r"^((?:[IVX]{2,}|[IVX])[\.\-\:])\s*",
-        ]
+            patterns.append(r"^((?:[IVX]{2,}|[IVX])[\.\-\:])\s*")
 
-        for pattern_idx, pattern in enumerate(patterns):
-            match = re.match(pattern, s, re.IGNORECASE)
-            if match:
-                base = match.group(1)
-                rest = s[match.end():].strip()
+        for pattern in patterns:
+            match = re.match(pattern, s)
+            if not match:
+                continue
+            base = match.group(1)
+            rest = s[match.end():].strip()
 
-                # For single-letter Roman numerals (pattern 2, the third one), be strict
-                if pattern_idx == 2 and len(base) == 2:  # Single letter + punct like "X-"
-                    # Reject if followed by lowercase letter (not a title)
-                    if rest and rest[0].islower():
-                        continue  # Try next pattern
-                    # Reject if nothing meaningful follows
-                    if not rest or len(rest) < 3:
-                        # Only accept if it's just the marker (like "X." alone)
-                        if s in ("I.", "II.", "III.", "IV.", "V.", "VI.", "VII.", "VIII.", "IX.", "X.",
-                                "XI.", "XII.", "XIII.", "XIV.", "XV.", "XVI.", "XVII.", "XVIII.", "XIX.",
-                                "XX.", "XXI.", "XXII.", "XXIII.", "XXIV.", "XXV.", "XXVI.", "XXVII.",
-                                "XXVIII.", "XXIX.", "XXX.") or \
-                           s.startswith(("I. ", "II. ", "III. ", "IV. ", "V. ", "VI. ", "VII. ", "VIII. ",
-                                        "IX. ", "X. ", "XI. ", "XII. ")):
-                            return base
-                        continue  # Skip this match
-
-                # If nothing after marker, use the marker
-                if not rest:
-                    return base
-
-                # If there's text after, include it but cap at reasonable length
-                if len(rest) > 0 and len(rest) <= 60 and rest[0].isupper():
-                    full = (base + ' ' + rest).strip()
-                    return full[:80]
-
-                # Otherwise, just return the chapter marker
+            if not rest:
+                return base
+            # Prose that merely starts with a marker ("Act motivated by...") is not a heading.
+            if rest[0].islower():
+                continue
+            if len(rest) <= 60:
+                return (base + ' ' + rest).strip()[:80]
+            if base.isupper():
                 return base
 
         return None
@@ -612,8 +623,10 @@ def detect_chapters(text: str, min_chapter_length: int = 100, include_part_marke
 
         # Standalone numbers/roman (strict - only after empty line)
         if not is_chapter and empty_count >= 1 and len(stripped) <= 10:
-            if re.match(r'^[IVXLCDM]{1,8}[\.\)]?\s*$', stripped, re.IGNORECASE) or \
-               re.match(r'^\d{1,3}[\.\)]?\s*$', stripped):
+            roman_ok = cfg is None or cfg.get("roman")
+            digits_ok = cfg is None or cfg.get("digits")
+            if (roman_ok and re.match(r'^[IVXLCDM]{1,8}[\.\)]?\s*$', stripped)) or \
+               (digits_ok and re.match(r'^\d{1,3}[\.\)]?\s*$', stripped)):
                 is_chapter = True
                 chapter_title = stripped
 
@@ -647,7 +660,7 @@ def detect_chapters(text: str, min_chapter_length: int = 100, include_part_marke
 
     # If we detected both PART headings and more granular CHAPTER headings,
     # re-run without PART markers so we split by chapters inside parts.
-    if include_part_markers:
+    if include_part_markers and cfg is None:
         has_part = any(re.match(r'^\s*part\b', ch.get("title", ""), re.IGNORECASE) for ch in chapters)
         has_chapter = any(re.match(r'^\s*chapter\b', ch.get("title", ""), re.IGNORECASE) for ch in chapters)
         if has_part and has_chapter:
@@ -657,7 +670,39 @@ def detect_chapters(text: str, min_chapter_length: int = 100, include_part_marke
                 include_part_markers=False,
             )
 
-    return chapters
+    return chapters if cfg is not None else _prune_outlier_headings(chapters)
+
+
+def _heading_kind(title: str) -> str:
+    t = title.strip()
+    m = re.match(r"(chapter|part|book|volume|section|act|scene)\b", t, re.IGNORECASE)
+    if m:
+        return m.group(1).lower()
+    if re.match(r"(prologue|epilogue|preface|foreword|introduction|afterword|interlude|conclusion|coda|appendix)", t, re.IGNORECASE):
+        return "named"
+    if re.match(r"\d", t):
+        return "number"
+    return "roman"
+
+
+def _prune_outlier_headings(chapters: List[Dict]) -> List[Dict]:
+    """If one heading style clearly dominates, merge stray one-off headings of other styles into the prior chapter."""
+    kinds = [_heading_kind(c.get("title", "")) for c in chapters]
+    counts = {k: kinds.count(k) for k in set(kinds) if k != "named"}
+    if not counts:
+        return chapters
+    dominant, dom_count = max(counts.items(), key=lambda kv: kv[1])
+    if dom_count < 3:
+        return chapters
+
+    kept: List[Dict] = []
+    for chapter, kind in zip(chapters, kinds):
+        stray = kind not in ("named", dominant) and counts.get(kind, 0) <= 2
+        if stray and kept:
+            kept[-1]["text"] = kept[-1]["text"] + "\n" + chapter["text"]
+            continue
+        kept.append(chapter)
+    return kept
 
 
 def chunk_by_size(text: str, target_chunk_size: int = 50000, overlap: int = 500):
@@ -725,7 +770,9 @@ def chunk_by_size(text: str, target_chunk_size: int = 50000, overlap: int = 500)
 
 def detect_chapters_with_formatting(text: str, page_info: List[Dict] = None,
                                    min_chapter_length: int = 100,
-                                   font_size_threshold: float = 1.3) -> List[Dict]:
+                                   font_size_threshold: float = 1.3,
+                                   template: Optional[str] = None,
+                                   custom_pattern: Optional[str] = None) -> List[Dict]:
     """
     Enhanced chapter detection using both text patterns and formatting signals.
     Falls back to text-only detection if font data unavailable.
@@ -739,6 +786,10 @@ def detect_chapters_with_formatting(text: str, page_info: List[Dict] = None,
     Returns:
         List of detected chapters with confidence scores
     """
+    # An explicit heading template bypasses formatting heuristics entirely.
+    if template and CHAPTER_TEMPLATES.get(template) is not None:
+        return detect_chapters(text, min_chapter_length, template=template, custom_pattern=custom_pattern)
+
     # Fall back to text-only if no formatting data available
     if not page_info or not any(p.get("font_metrics") for p in page_info):
         chapters = detect_chapters(text, min_chapter_length)
@@ -806,7 +857,8 @@ def detect_chapters_with_formatting(text: str, page_info: List[Dict] = None,
 
 def smart_chapter_detection(text: str, min_chapter_length: int = 1000,
                            max_chunk_size: int = 50000, page_info: List[Dict] = None,
-                           font_size_threshold: float = 1.3):
+                           font_size_threshold: float = 1.3, template: Optional[str] = None,
+                           custom_pattern: Optional[str] = None):
     """
     Smart chapter detection that falls back to size-based chunking.
 
@@ -834,7 +886,9 @@ def smart_chapter_detection(text: str, min_chapter_length: int = 1000,
         text,
         page_info=page_info,
         min_chapter_length=100,
-        font_size_threshold=font_size_threshold
+        font_size_threshold=font_size_threshold,
+        template=template,
+        custom_pattern=custom_pattern,
     )
     
     # If no chapters detected, use size-based chunking

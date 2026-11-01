@@ -126,6 +126,7 @@ Both installers prompt for a PyTorch runtime. Pick the option that matches your 
 - **GPU OOM or slow:** Lower batch size in Settings or rerun the installer with a different runtime (CUDA 11.8 or CPU) after updating drivers.  
 - **Audio cut-offs / robotic output:** Use higher-quality/longer (10–20 s) voice samples; check FFmpeg install.
 - **PyTorch wheel version not found during install:** Re-run the installer. v2.5 now retries with compatible wheel versions automatically.
+- **`No module named 'encodec.model'` / F5-TTS import error:** Activate the `PolyVox` environment and run `pip install --force-reinstall --no-deps encodec vocos` (also make sure no folder or file named `encodec` sits in your working directory). The installers now run this repair automatically.
 - **Launch uses wrong Python environment:** Use `./run_gui.sh` from the project root. v2.5 pins startup to the project interpreter and reports the active executable.
 
 ---
@@ -218,6 +219,12 @@ PolyVox now includes **advanced PDF chapter detection** with:
 - **Long lines are no longer cut off** (an old 500-character limit was removed; F5-TTS chunks text itself).
 - **Speech-rate governor:** lines synthesized too fast are regenerated at a lower speed. Narration uses a slower, audiobook-style pace (`NARRATOR_*` constants in `app/core/voices.py`).
 - Fixed a crash after audio export caused by logging from a worker thread into Qt widgets, and an empty-audio error when silence trimming removed a very short clip.
+
+### 🗂️ Chapters & voices workflow
+- **Chapter detection fixes:** prose such as "Act motivated…" or "Section mole…" is no longer mistaken for a heading, and stray one-off headings are merged when one style dominates.
+- **Heading format picker** (Auto, Chapter N, Part N, Book/Volume, Act/Scene, Roman numerals, Numbers only, or a **custom regex**), plus **Merge Selected / Delete Selected** to fix the chapter list by hand.
+- **Voice assignments persist per book** across chapters and reset when a different book is imported.
+- **Auto-Assign Voices:** matches voices to characters using BookNLP gender/age, role words in names and speech style.
 
 ### 📦 Installers
 - Installers now pin PyTorch 2.5.1 (CUDA 11.8 / 12.1 / CPU) and 2.7.0 (CUDA 12.8), still with automatic fallback to the latest compatible wheels and then CPU.

@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import threading
 
 from PySide6.QtCore import Qt, QObject, Signal
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QProgressBar,
+    QLineEdit,
 )
 from app.ui_qt.choice_widgets import PopupChoice
 
@@ -23,10 +25,11 @@ class _UiDispatcher(QObject):
 
 
 class BookProcessingTab(QWidget):
-    def __init__(self, set_book_text_cb, go_to_characters_cb, log_debug=None, parent=None):
+    def __init__(self, set_book_text_cb, go_to_characters_cb, log_debug=None, book_loaded_cb=None, parent=None):
         super().__init__(parent)
         self.set_book_text_cb = set_book_text_cb
         self.go_to_characters_cb = go_to_characters_cb
+        self.book_loaded_cb = book_loaded_cb
         self.log_debug = log_debug or (lambda msg: print(msg))
 
         self.current_book_path = None
@@ -82,6 +85,19 @@ class BookProcessingTab(QWidget):
         self.threshold_dropdown.setMaximumWidth(150)
         controls.addWidget(self.threshold_dropdown)
 
+        controls.addWidget(QLabel("Format:"))
+        from app.core.chapter_chunker import CHAPTER_TEMPLATES
+        self.template_dropdown = PopupChoice()
+        self.template_dropdown.addItems(list(CHAPTER_TEMPLATES.keys()))
+        self.template_dropdown.setToolTip("Pick the book's heading style and click Detect Chapters to re-run.")
+        self.template_dropdown.currentTextChanged.connect(self._on_template_change)
+        controls.addWidget(self.template_dropdown)
+
+        self.custom_pattern_edit = QLineEdit()
+        self.custom_pattern_edit.setPlaceholderText(r"Heading regex, e.g. ^Episode \d+")
+        self.custom_pattern_edit.setVisible(False)
+        left.addWidget(self.custom_pattern_edit)
+
         # Chapters list
         chapters_label = QLabel("Chapters")
         chapters_label.setStyleSheet("font-weight: 700; font-size: 11px; margin-top: 8px;")
@@ -91,6 +107,17 @@ class BookProcessingTab(QWidget):
         self.chapter_list.setSelectionMode(self.chapter_list.SelectionMode.ExtendedSelection)
         self.chapter_list.itemSelectionChanged.connect(self._on_chapter_select)
         left.addWidget(self.chapter_list, 1)
+
+        edit_row = QHBoxLayout()
+        merge_btn = QPushButton("🔗 Merge Selected")
+        merge_btn.setToolTip("Combine the selected chapters into the first selected one.")
+        merge_btn.clicked.connect(self._merge_selected)
+        edit_row.addWidget(merge_btn)
+        delete_btn = QPushButton("🗑 Delete Selected")
+        delete_btn.setToolTip("Remove the selected entries (e.g. false chapter headings) from the list.")
+        delete_btn.clicked.connect(self._delete_selected)
+        edit_row.addWidget(delete_btn)
+        left.addLayout(edit_row)
 
         # Progress bar
         self.progress_bar = QProgressBar()
@@ -168,6 +195,9 @@ class BookProcessingTab(QWidget):
             avg_length = sum(len(c.get("text", "")) for c in self.chapters) / len(self.chapters) if self.chapters else 0
 
             def update():
+                if self.book_loaded_cb:
+                    book_id = f"{file_name}|{len(self.raw_text)}|{self.raw_text[:2000]}"
+                    self.book_loaded_cb(hashlib.sha1(book_id.encode("utf-8", errors="ignore")).hexdigest()[:16])
                 self.update_status(
                     f"✓ {file_name} | {len(self.chapters)} chapter(s) detected (avg {avg_length/1000:.1f}K chars)"
                 )
@@ -231,6 +261,8 @@ class BookProcessingTab(QWidget):
                 min_chapter_length=1000,
                 max_chunk_size=50000,
                 font_size_threshold=self.font_size_threshold,
+                template=self.template_dropdown.currentText(),
+                custom_pattern=self.custom_pattern_edit.text(),
             )
             self.chapters = detected
             self.update_chapter_list([c["title"] for c in self.chapters])
@@ -252,10 +284,54 @@ class BookProcessingTab(QWidget):
                     "Select chapters and click 'Send to Characters' to continue."
                 ),
             )
+        except (ValueError, re.error) as exc:
+            self._safe_ui(lambda: self.progress_bar.setVisible(False))
+            self.update_status("Invalid custom heading pattern")
+            QMessageBox.warning(self, "Custom pattern", str(exc))
         except Exception as exc:
             self.log_debug(f"[BookProcessingTab] Chapter detection failed: {exc}")
             self._safe_ui(lambda: self.progress_bar.setVisible(False))
             QMessageBox.critical(self, "Error", f"Chapter detection failed:\n{exc}")
+
+    def _on_template_change(self, value: str):
+        self.custom_pattern_edit.setVisible(value.startswith("Custom"))
+
+    def _selected_rows(self):
+        return sorted({i.row() for i in self.chapter_list.selectedIndexes()})
+
+    def _refresh_chapters(self, status: str):
+        self.update_chapter_list([c["title"] for c in self.chapters])
+        self.chapter_preview.clear()
+        self.update_status(status)
+
+    def _merge_selected(self):
+        rows = self._selected_rows()
+        if len(rows) < 2:
+            QMessageBox.information(self, "Merge", "Select two or more chapters to merge.")
+            return
+        first = self.chapters[rows[0]]
+        merged_text = "\n".join(self.chapters[r].get("text", "") for r in rows)
+        merged = dict(first, text=merged_text)
+        drop = set(rows[1:])
+        self.chapters = [
+            merged if i == rows[0] else c for i, c in enumerate(self.chapters) if i not in drop
+        ]
+        self._refresh_chapters(f"Merged {len(rows)} chapters into '{merged.get('title', '')}'")
+
+    def _delete_selected(self):
+        rows = self._selected_rows()
+        if not rows:
+            QMessageBox.information(self, "Delete", "Select the chapters to delete.")
+            return
+        answer = QMessageBox.question(
+            self, "Delete chapters",
+            f"Remove {len(rows)} selected entr{'y' if len(rows) == 1 else 'ies'} from the list?\n"
+            "Use Merge instead if you want to keep their text.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.chapters = [c for i, c in enumerate(self.chapters) if i not in set(rows)]
+        self._refresh_chapters(f"{len(self.chapters)} chapter(s) remaining")
 
     def _on_threshold_change(self, value: str):
         if "1.5x" in value:
