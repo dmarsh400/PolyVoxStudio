@@ -24,6 +24,7 @@ librosa>=0.10.0
 mutagen>=1.47.0
 rapidfuzz>=3.0.0
 faster-whisper>=1.0.0
+av>=11,<19  # faster-whisper 1.2.1 uses metadata_errors, removed in PyAV 19
 silero-vad>=5.1.0
 
 # GUI

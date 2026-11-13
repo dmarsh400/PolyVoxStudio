@@ -37,6 +37,7 @@ Clone the repo and run the platform installer. Each script creates a `PolyVox` v
 - Linux installer now falls back to CPU PyTorch automatically if GPU wheel install fails.
 - Linux launcher now uses the `PolyVox/bin/python` interpreter directly (prevents accidental use of base/conda Python).
 - Linux launcher now auto-checks core dependencies and attempts repair from `requirements_min.txt` when something is missing.
+- Windows installer checks Python and installation failures, defaults to CPU when no NVIDIA GPU is detected, and reports any CPU fallback.
 
 ### 🐧 Linux (and advanced macOS setups)
 
@@ -57,7 +58,7 @@ cd PolyVoxStudio
 .\install_windows.bat
 ```
 
-You can also double-click `install_windows.bat` in Explorer. The batch file launches PowerShell with execution-policy bypass, then runs the full installer. Detailed notes live in [`INSTALL_WINDOWS.md`](INSTALL_WINDOWS.md).
+You can also double-click `install_windows.bat` in Explorer. The batch file launches PowerShell with execution-policy bypass, then runs the full installer. Use 64-bit Python (3.11 recommended). The installer shows errors if setup fails and can reuse or recreate an existing environment. See the [Windows installation guide](docs/INSTALL_WINDOWS.md) for prerequisites and troubleshooting.
 
 > Need CPU-only? Choose the CPU option when prompted. Unsure which CUDA runtime to pick? Check the **GPU Support** section below.
 
@@ -83,7 +84,7 @@ On Linux, `run_gui.sh` automatically uses the local `PolyVox` environment if pre
 Click **Detect Characters** → review/merge/rename characters → fix split/merged lines using split/merge tools.
 
 4) **Voices**  
-**Refresh Characters** → assign built-in voices or **Clone Voice** using a clean 6–20 s sample → **Send to Audio Processing**.
+Assign built-in voices or use **Clone Voices** with a clean 6–20 s sample. New clones appear automatically; use **Refresh Voices** to reload external changes without losing selections → **Queue to Audio**.
 
 5) **Audio Processing**  
 Select chapters/batches → choose output (defaults to `/output/audio`) → **Export** (per-chapter or **M4B** full audiobook).
@@ -132,6 +133,8 @@ Join our official Discord server to chat with other users, share your generated 
 - **GPU OOM or slow:** Lower batch size in Settings or rerun the installer with a different runtime (CUDA 11.8 or CPU) after updating drivers.  
 - **Audio cut-offs / robotic output:** Use higher-quality/longer (10–20 s) voice samples; check FFmpeg install.
 - **PyTorch wheel version not found during install:** Re-run the installer. v2.5 now retries with compatible wheel versions automatically.
+- **Windows installation stops:** Check the error shown above the failure message, fix the reported issue, then rerun the installer. For a broken existing environment, choose to recreate it when prompted.
+- **Reference transcription fails with `open() got an unexpected keyword argument 'metadata_errors'`:** On Windows, run `.\PolyVox\Scripts\python.exe -m pip install "av>=11,<19"` from the project folder and restart. Previously saved voices with no transcript will be transcribed on first use.
 - **`No module named 'encodec.model'` / F5-TTS import error:** Activate the `PolyVox` environment and run `pip install --force-reinstall --no-deps encodec vocos` (also make sure no folder or file named `encodec` sits in your working directory). The installers now run this repair automatically.
 - **Launch uses wrong Python environment:** Use `./run_gui.sh` from the project root. v2.5 pins startup to the project interpreter and reports the active executable.
 
@@ -177,8 +180,7 @@ Voice definitions (e.g., JSON entries) can opt in/out per character using:
 
 - **Linux Installation Guide** — prerequisites, installer walkthrough, troubleshooting  
   → `INSTALL_LINUX.md`
-- **Windows Installation Guide** — one-click batch installer and manual PowerShell steps  
-  → `INSTALL_WINDOWS.md`
+- **[Windows Installation Guide](docs/INSTALL_WINDOWS.md)** — one-click batch installer and manual PowerShell steps.
 - **GPU Compatibility Guide** — supported cards, drivers, and runtime recommendations  
   → `GPU_COMPATIBILITY.md`
 - **Contributing guide** — dev setup, testing, PR flow  
@@ -205,6 +207,8 @@ PolyVox now includes **advanced PDF chapter detection** with:
 ### 🎙️ F5-TTS engine & PySide6 UI
 - **XTTS v2 / Coqui TTS has been replaced by [F5-TTS](https://github.com/SWivid/F5-TTS)**, the only synthesis engine, for faster inference and higher-fidelity cloning. `coqui-tts` is no longer a dependency; `f5-tts` and `PySide6` are (see `requirements_min.txt`).
 - F5-TTS needs a transcript of each voice's reference clip (`ref_text`). Existing voices can be migrated with `scripts/migrate_voices_to_f5.py` (uses `faster-whisper`); new clones are transcribed once at clone time.
+- Cloned voices appear in the Voices tab automatically. Use **Refresh Voices** to reload changes made outside the app without restarting; current selections are preserved.
+- PyAV is constrained to a version compatible with faster-whisper reference transcription.
 - **PySide6 is the primary UI** (`app/ui_qt`, launched by `app/main.py`). The CustomTkinter UI (`app/ui`) remains only for reference.
 - Custom click-anywhere dropdowns replace `QComboBox` popups (which fail to render on some Linux window managers). The Split Line dialog now inserts a newline on **Enter** and confirms with **Ctrl+Enter**.
 

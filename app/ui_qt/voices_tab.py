@@ -74,6 +74,11 @@ class VoicesTab(QWidget):
         load_btn.clicked.connect(self.load_voice_selections)
         actions.addWidget(load_btn)
 
+        refresh_btn = QPushButton("Refresh Voices")
+        refresh_btn.setToolTip("Reload voices without restarting or changing current selections.")
+        refresh_btn.clicked.connect(self.refresh_voices)
+        actions.addWidget(refresh_btn)
+
         auto_btn = QPushButton("✨ Auto-Assign Voices")
         auto_btn.setToolTip("Match voices to characters by gender, age, role and speech style (replaces current picks).")
         auto_btn.clicked.connect(self.auto_assign_all)
@@ -94,6 +99,37 @@ class VoicesTab(QWidget):
         self.status = QLabel("No character lines loaded.")
         self.status.setStyleSheet("font-size: 10px; color: #666;")
         layout.addWidget(self.status, 0)
+
+    def refresh_voices(self):
+        current = self._collect_assignments()
+        try:
+            self._load_voice_catalog()
+        except (OSError, ValueError, TypeError) as exc:
+            self.debug_callback(f"[VoicesTab] Could not refresh voices: {exc}")
+            QMessageBox.warning(self, "Refresh Voices", f"Could not refresh voices: {exc}")
+            return
+
+        labels = sorted({entry.get("label") for entry in self.voice_catalog if entry.get("label")})
+        missing = []
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            combo = self._combo_for_row(row)
+            if not item or not combo:
+                continue
+            selected = current.get(item.text())
+            choices = list(labels)
+            if selected and selected not in choices and selected != "(no voices available)":
+                choices.append(selected)
+                missing.append(selected)
+            combo.addItems(choices or ["(no voices available)"])
+            if selected == "(no voices available)" and choices:
+                combo.setCurrentText(choices[0])
+
+        self.status.setText(f"Refreshed {len(labels)} voice(s).")
+        if missing:
+            message = "Previously selected voices are no longer in the catalog: " + ", ".join(sorted(set(missing)))
+            self.debug_callback(f"[VoicesTab] {message}")
+            QMessageBox.warning(self, "Refresh Voices", message + ". Please select another voice.")
 
     def set_book(self, book_key):
         """Start a fresh assignment set for a newly imported book (restoring it if seen before)."""

@@ -37,7 +37,7 @@ Use this guide to install PolyVox Studio on Windows with the `install_windows.ps
 
 The one-click installer will:
 
-1. Locates your preferred Python interpreter (override with `$env:PYTHON` if needed).
+1. Finds 64-bit Python, preferring Python 3.11 when using the `py` launcher (override with `$env:PYTHON` or `-Python` if needed).
 2. Prompts for a PyTorch runtime (CUDA 12.8 for RTX 50-series, CUDA 12.1, CUDA 11.8, or CPU).
 3. Creates or reuses the `PolyVox` virtual environment in the project root.
 4. Installs PyTorch from the official wheel archive plus every dependency in `requirements_min.txt`.
@@ -55,7 +55,7 @@ If the exact PyTorch version for your Python build is unavailable (common with n
    Shift + Right-click the project folder → **Open PowerShell window here**, or run `cd "C:\\path\\to\\Polyvox Studio"`.
 3. **(Optional) Pin a specific interpreter**  
    ```powershell
-   $env:PYTHON = "C:\\Python311\\python.exe"
+   $env:PYTHON = "C:\Python311\python.exe"
    ```
 4. **Allow script execution for this session**  
    ```powershell
@@ -66,8 +66,11 @@ If the exact PyTorch version for your Python build is unavailable (common with n
    .\install_windows.ps1
    ```
    Follow the prompt to pick the PyTorch runtime that matches your GPU.
+   To select the detected runtime automatically, use `.\install_windows.ps1 -AutoTorch`.
+   To use a particular interpreter without setting an environment variable, use
+   `.\install_windows.ps1 -Python "C:\Python311\python.exe"`.
 6. **Review the summary**  
-   When you see `✅ PolyVox environment ready!` the setup is complete.
+   When you see `PolyVox environment ready!` the setup is complete.
 
 ---
 
@@ -140,12 +143,15 @@ Ensure their installation directories are on your PATH before launching PolyVox 
 
 | Symptom | Fix |
 |---------|-----|
-| `python` / `py` not recognized | Reinstall Python (64-bit) with "Add to PATH" enabled, or set `$env:PYTHON` to the desired interpreter. |
+| `python` / `py` not recognized | Reinstall Python (64-bit) with "Add to PATH" enabled, or set `$env:PYTHON` to the desired interpreter's full path. |
+| Installer stops on a pip or spaCy error | Read the error immediately above the failure message, fix the reported issue, and rerun the installer. An incomplete environment can be reused or recreated when prompted. |
+| Existing environment has no Python or is unusable | Rerun the installer and choose to recreate the environment when prompted. |
 | Script blocked by execution policy | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` or launch with `powershell -ExecutionPolicy Bypass -File install_windows.ps1`. |
 | PyTorch wheel download fails | Update NVIDIA drivers, temporarily disable VPN/firewall, or rerun and pick the CPU runtime. |
 | PyTorch wheel version not found during install | Re-run the installer. v2.5 now retries with compatible wheel versions automatically. |
 | pip reports SSL/proxy errors | Configure `%APPDATA%\pip\pip.ini` or set `$env:PIP_INDEX_URL` / `$env:HTTPS_PROXY` before running the installer. |
 | Missing FFmpeg/Tesseract warnings | Install the tools via winget/Chocolatey and restart PowerShell so the PATH refreshes. |
+| Reference transcription fails with `open() got an unexpected keyword argument 'metadata_errors'` | In the project directory, run `.\PolyVox\Scripts\python.exe -m pip install "av>=11,<19"` and restart PolyVox. Saved voices with no transcript will be transcribed on first use. |
 
 ---
 
@@ -154,5 +160,6 @@ Ensure their installation directories are on your PATH before launching PolyVox 
 - **Update dependencies:** activate the environment then run `pip install --upgrade pip` followed by `pip install -r requirements_min.txt --upgrade`.
 - **Recreate the environment:** delete the `PolyVox` directory and rerun `install_windows.ps1`; the script will rebuild everything.
 - **Switch PyTorch runtimes:** rerun the installer and select a different CUDA/CPU option to reinstall the matching wheels.
+- **Confirm the installed runtime:** check the PyTorch version and CUDA line at the end of installation. If both GPU installation attempts fail, the installer tries CPU wheels and reports that fallback.
 
 If you hit a snag, capture a transcript with `Start-Transcript` / `Stop-Transcript` and include it when opening a GitHub issue.

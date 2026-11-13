@@ -8,7 +8,7 @@
 #>
 
 param(
-    [string]$Python = "py",
+    [string]$Python = $(if ($env:PYTHON) { $env:PYTHON } else { "py" }),
     [switch]$AutoTorch
 )
 
@@ -16,28 +16,28 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $envName = "PolyVox"
 $envDir = Join-Path $projectRoot $envName
-$pythonArgs = @("-3")
 
 function Ensure-Python {
     param([string]$Executable)
 
-    $minimum = 'import sys; assert sys.version_info >= (3,9)'
+    $minimum = 'import sys; assert sys.version_info >= (3,9) and sys.maxsize > 2**32'
     $candidates = @()
 
     if ($Executable -eq "py") {
-        $candidates += ,@("py", "-3")
         $candidates += ,@("py", "-3.11")
+        $candidates += ,@("py", "-3.12")
         $candidates += ,@("py", "-3.10")
         $candidates += ,@("py", "-3.9")
+        $candidates += ,@("py", "-3")
+        $candidates += ,@("python")
+        $candidates += ,@("python3")
+        $candidates += ,@("python3.11")
+        $candidates += ,@("python3.12")
+        $candidates += ,@("python3.10")
+        $candidates += ,@("python3.9")
     } elseif ($Executable) {
         $candidates += ,@($Executable)
     }
-
-    $candidates += ,@("python")
-    $candidates += ,@("python3")
-    $candidates += ,@("python3.11")
-    $candidates += ,@("python3.10")
-    $candidates += ,@("python3.9")
 
     $unique = @()
     $seen = @{}
@@ -65,9 +65,10 @@ function Ensure-Python {
         $testArgs = $args + @("-c", $minimum)
         try {
             & $exe @($testArgs)
+            if ($LASTEXITCODE -ne 0) { continue }
             $returnValue = @($exe) + $args
             if (($entry -join ' ') -ne $preferredKey) {
-                Write-Host "Python launcher 'py -3' unavailable; using '$($entry -join ' ')'." -ForegroundColor Yellow
+                Write-Host "Using Python command '$($entry -join ' ')'." -ForegroundColor Yellow
             }
             return $returnValue
         } catch {
@@ -76,7 +77,7 @@ function Ensure-Python {
     }
 
     $attempted = ($unique | ForEach-Object { "'" + ($_ -join ' ') + "'" }) -join ', '
-    Write-Error "Python 3.9+ not found. Tried: $attempted. Install a supported version from https://python.org/downloads" -ErrorAction Stop
+    Write-Error "64-bit Python 3.9+ not found. Tried: $attempted. Install a supported version from https://python.org/downloads" -ErrorAction Stop
 }
 
 function Get-RuntimeOption {
@@ -91,7 +92,7 @@ function Get-RuntimeOption {
 }
 
 function Detect-TorchRuntime {
-    $detectedChoice = "3"
+    $detectedChoice = "4"
     $reason = "No NVIDIA GPU detected; defaulting to CPU wheel."
     $gpuName = $null
     $driver = $null
@@ -102,7 +103,7 @@ function Detect-TorchRuntime {
         $controllers = @()
     }
 
-    $nvidia = $controllers | Where-Object { $_.Name -like "*NVIDIA*" }
+    $nvidia = @($controllers | Where-Object { $_.Name -like "*NVIDIA*" })
 
     if ($nvidia -and $nvidia.Count -gt 0) {
         $gpuName = $nvidia[0].Name
@@ -211,12 +212,29 @@ function New-Venv {
 
     $venvArgs = $args + @("-m", "venv", $envDir)
     & $exe @($venvArgs)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create the Python environment (exit code $LASTEXITCODE)."
+    }
 }
 
 function Invoke-InEnv {
     param([string]$Module, [string[]]$Arguments)
     $pythonExe = Join-Path $envDir "Scripts/python.exe"
     & $pythonExe "-m" $Module @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python module '$Module' failed (exit code $LASTEXITCODE). See the output above."
+    }
+}
+
+function Test-Venv {
+    $pythonExe = Join-Path $envDir "Scripts/python.exe"
+    if (-not (Test-Path $pythonExe)) {
+        throw "The environment has no Python executable at $pythonExe. Rerun the installer and choose to recreate it."
+    }
+    & $pythonExe -c 'import sys; assert sys.version_info >= (3,9) and sys.maxsize > 2**32'
+    if ($LASTEXITCODE -ne 0) {
+        throw "The environment's Python is unusable or unsupported. Rerun the installer and choose to recreate it."
+    }
 }
 
 function Install-Torch {
@@ -229,31 +247,33 @@ function Install-Torch {
         "torch==$($Runtime.TorchVersion)+$($Runtime.Suffix)" `
         "torchvision==$($Runtime.TorchvisionVersion)+$($Runtime.Suffix)" `
         "torchaudio==$($Runtime.TorchaudioVersion)+$($Runtime.Suffix)" `
-        "--index-url" $Runtime.Index 2>&1 | Out-Null
+        "--index-url" $Runtime.Index
     
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "⚠️ Exact PyTorch wheel set not available for this Python/runtime combination." -ForegroundColor Yellow
+        Write-Host "Exact PyTorch wheel set could not be installed." -ForegroundColor Yellow
         Write-Host "   Retrying with the latest compatible wheels from $($Runtime.Index)..." -ForegroundColor Yellow
         
         & $pythonExe -m pip install `
             "torch" `
             "torchvision" `
             "torchaudio" `
-            "--index-url" $Runtime.Index 2>&1 | Out-Null
+            "--index-url" $Runtime.Index
         
         if ($LASTEXITCODE -ne 0 -and $Runtime.Suffix -ne "cpu") {
-            Write-Host "⚠️ GPU wheel installation failed. Falling back to CPU wheels so setup can complete." -ForegroundColor Yellow
+            Write-Host "GPU wheel installation failed. Falling back to CPU wheels so setup can complete." -ForegroundColor Yellow
             & $pythonExe -m pip install `
                 "torch" `
                 "torchvision" `
                 "torchaudio" `
-                "--index-url" "https://download.pytorch.org/whl/cpu" 2>&1 | Out-Null
+                "--index-url" "https://download.pytorch.org/whl/cpu"
             
             if ($LASTEXITCODE -ne 0) {
-                Write-Error "❌ Unable to install PyTorch automatically for this environment. Try a different Python version (3.10/3.11 are safest) or re-run and select CPU mode." -ErrorAction Stop
+                throw "Unable to install PyTorch. See the errors above, then retry with Python 3.11 or CPU mode."
             }
+            $Runtime.Suffix = "cpu"
+            $Runtime.Index = "https://download.pytorch.org/whl/cpu"
         } elseif ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ PyTorch installation failed. Check your Python version and try again." -ErrorAction Stop
+            throw "PyTorch installation failed. See the errors above and check your Python version."
         }
     }
 }
@@ -262,10 +282,11 @@ function Install-Dependencies {
     Write-Host "Installing PolyVox core dependencies" -ForegroundColor Green
     Invoke-InEnv "pip" @("install", "-r", (Join-Path $projectRoot "requirements_min.txt"))
     $pythonExe = Join-Path $envDir "Scripts/python.exe"
-    & $pythonExe -c "from f5_tts.api import F5TTS" 2>&1 | Out-Null
+    & $pythonExe -c "from f5_tts.api import F5TTS"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "F5-TTS import check failed; reinstalling vocos/encodec..." -ForegroundColor Yellow
         & $pythonExe -m pip install --force-reinstall --no-deps encodec vocos
+        if ($LASTEXITCODE -ne 0) { throw "Failed to reinstall vocos/encodec (exit code $LASTEXITCODE)." }
         & $pythonExe -c "from f5_tts.api import F5TTS"
         if ($LASTEXITCODE -ne 0) { Write-Error "F5-TTS still fails to import. See the error above." -ErrorAction Stop }
     }
@@ -275,31 +296,40 @@ function Install-Dependencies {
 
 function Show-Notes {
     param($Runtime)
-    Write-Host "`n✅ PolyVox environment ready!" -ForegroundColor Green
-    Write-Host "`nInstalled PyTorch runtime:`n  $($Runtime.Suffix) ($($Runtime.Index))`n" -ForegroundColor Cyan
+    Write-Host "`nPyTorch wheel index used:`n  $($Runtime.Suffix) ($($Runtime.Index))`n" -ForegroundColor Cyan
+    $pythonExe = Join-Path $envDir "Scripts/python.exe"
+    & $pythonExe -c "import torch; print('Installed torch:', torch.__version__, '| CUDA:', torch.version.cuda or 'CPU')"
+    if ($LASTEXITCODE -ne 0) { throw "PyTorch verification failed (exit code $LASTEXITCODE)." }
+    Write-Host "`nPolyVox environment ready!" -ForegroundColor Green
     Write-Host "To activate the environment in this shell:" -ForegroundColor Cyan
     Write-Host "  `"$envDir\Scripts\activate.ps1`"`n"
     Write-Host "Launch the UI with:`n  .\run_gui.bat" -ForegroundColor Cyan
-    Write-Host "`nIf FFmpeg or Tesseract are missing, install them via:`n  winget install ffmpeg.ffmpeg`n  winget install UB-Mannheim.TesseractOCR" -ForegroundColor Yellow
+    Write-Host "`nIf FFmpeg or Tesseract are missing, install them via:`n  winget install Gyan.FFmpeg`n  winget install UB-Mannheim.TesseractOCR" -ForegroundColor Yellow
 }
 
 Write-Host "==========================================="
 Write-Host " PolyVox Studio Windows Installer" -ForegroundColor Cyan
 Write-Host "==========================================="
 
-$pyCmd = Ensure-Python -Executable $Python
-$detectedRuntime = Detect-TorchRuntime
-if ($AutoTorch) {
-    Write-Host "Auto-selecting PyTorch runtime: $($detectedRuntime.Label)" -ForegroundColor Cyan
-    if ($detectedRuntime.Reason) {
-        Write-Host $detectedRuntime.Reason -ForegroundColor DarkCyan
+Push-Location $projectRoot
+try {
+    $pyCmd = Ensure-Python -Executable $Python
+    $detectedRuntime = Detect-TorchRuntime
+    if ($AutoTorch) {
+        Write-Host "Auto-selecting PyTorch runtime: $($detectedRuntime.Label)" -ForegroundColor Cyan
+        if ($detectedRuntime.Reason) {
+            Write-Host $detectedRuntime.Reason -ForegroundColor DarkCyan
+        }
+        $runtime = $detectedRuntime
+    } else {
+        $runtime = Prompt-TorchRuntime -Detected $detectedRuntime
     }
-    $runtime = $detectedRuntime
-} else {
-    $runtime = Prompt-TorchRuntime -Detected $detectedRuntime
+    New-Venv -PyCmd $pyCmd
+    Test-Venv
+    Invoke-InEnv "pip" @("install", "--upgrade", "pip", "setuptools", "wheel")
+    Install-Torch -Runtime $runtime
+    Install-Dependencies
+    Show-Notes -Runtime $runtime
+} finally {
+    Pop-Location
 }
-New-Venv -PyCmd $pyCmd
-Invoke-InEnv "pip" @("install", "--upgrade", "pip", "setuptools", "wheel")
-Install-Torch -Runtime $runtime
-Install-Dependencies
-Show-Notes -Runtime $runtime

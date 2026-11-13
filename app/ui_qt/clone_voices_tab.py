@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -19,6 +20,8 @@ VOICES_DIR = Path("voices/references")
 
 
 class CloneVoicesTab(QWidget):
+    voice_saved = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.audio_path = ""
@@ -142,4 +145,5 @@ class CloneVoicesTab(QWidget):
 
         VOICES_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         self.log(f"Saved voice '{voice_name}' to {target}")
+        self.voice_saved.emit()
         QMessageBox.information(self, "Saved", f"Voice '{voice_name}' saved successfully.")

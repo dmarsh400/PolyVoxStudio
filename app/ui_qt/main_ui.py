@@ -177,6 +177,7 @@ class PolyVoxApp(QMainWindow):
 
     def build_clone_voices_tab(self):
         self.clone_voices_tab = CloneVoicesTab()
+        self.clone_voices_tab.voice_saved.connect(self.voices_tab.refresh_voices)
         self.notebook.addTab(self.clone_voices_tab, "Clone Voices")
 
     def build_gpu_tab(self):
